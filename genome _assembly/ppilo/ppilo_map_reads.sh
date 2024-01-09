@@ -1,0 +1,1 @@
+minimap2 -ax map-ont --secondary=no -K 6G -I 32G -t 20 ppilo_ragtag_vs_pdrum/ragtag.scaffold.fasta ppilo_Hopkins_1704_reads.fastq
