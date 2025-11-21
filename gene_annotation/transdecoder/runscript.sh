@@ -5,7 +5,7 @@ eval "$conda_setup"
 conda env create -n transdecoder_5.5.0 envs/transdecoder.yml
 conda env create -n blast_2.12.0 envs/blast.yml
 
-merge_gtf="../hisat2/phlox_stringtie-hisat2_merge.gtf"
+merge_gtf="../hisat2_stringtie/results/stringtie/hisat2/merged_assembly/phlox_stringtie-hisat2_merge.gtf"
 transcripts_fa="phlox_stringtie-hisat2_merge.transcripts.fa"
 
 # Step 1
