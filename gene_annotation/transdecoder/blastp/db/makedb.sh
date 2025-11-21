@@ -11,6 +11,10 @@ conda_setup="$('conda' 'shell.bash' 'hook' 2> /dev/null)"
 eval "$conda_setup"
 conda activate blast_2.12.0 
 
-gunzip Ericales_uniprotTrembl_2022.10.10.faa.gz
+uniprot_fa=Ericales_uniprotTrembl_2022.10.10.faa
 
-makeblastdb -in Ericales_uniprotTrembl_2022.10.10.faa -input_type fasta -dbtype prot 
+if [ -s $uniprot_fa.xz ]; then
+    unxz $uniprot_fa.xz
+fi
+
+makeblastdb -in $uniprot_fa -input_type fasta -dbtype prot 
