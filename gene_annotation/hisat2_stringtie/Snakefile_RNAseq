@@ -1,0 +1,26 @@
+from glob import glob
+from os.path import basename
+import yaml
+from os import system
+
+configfile: "config/config.yaml"
+res_config = yaml.load(open("config/resources.yaml"),Loader=yaml.FullLoader)
+SAMPLES = list(set(['_'.join(basename(i).split('_')[0:-3]) for i in glob("%s*_1.fq.gz" % config["fastqDir"])]))
+
+system("mkdir -p %stmp" % config["Hisat2SamsortOutdir"])
+system("mkdir -p %stmp" % config["StarSamsortOutdir"])
+
+### RULES ###
+rule all:
+    input:
+        config["StringtieHisat2MergeDir"] + config["speciesname"] + "_stringtie-hisat2_merge.gtf" 
+
+# rule all:
+#     input:
+#         "mytask.taco.hisat2.done",
+#         "mytask.taco.star.done",
+#         config["StringtieStarMergeDir"] + config["speciesname"] + "_stringtie-star_merge.gtf",
+#         config["StringtieHisat2MergeDir"] + config["speciesname"] + "_stringtie-hisat2_merge.gtf" 
+
+
+include: "workflow/rules/rnaseq.smk"	

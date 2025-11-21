@@ -1,0 +1,47 @@
+hisat2_align:
+    nodes: 1 
+    threads: 12
+    mem_mb: 72000
+    time: 4320
+
+samsort:
+    nodes: 1
+    threads: 12
+    mem_mb: 48000
+    time: 720  
+
+stringtie:
+    nodes: 1 
+    threads: 16
+    mem_mb: 64000
+    time: 1440
+
+stringtie_merge:
+    nodes: 1
+    threads: 1
+    mem_mb: 40000 
+    time: 720
+
+star_1stpass:
+    nodes: 1 
+    threads: 8
+    mem_mb: 64000
+    time: 3840
+
+star_2ndpass:
+    nodes: 1
+    threads: 8
+    mem_mb: 64000
+    time: 3840
+
+scallop:
+    nodes: 1
+    threads: 1
+    mem_mb: 64000
+    time: 840
+
+taco:
+    nodes: 1
+    threads: 16 
+    mem_mb: 64000
+    time: 360
