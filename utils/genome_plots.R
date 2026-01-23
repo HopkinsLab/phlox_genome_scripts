@@ -243,10 +243,22 @@ FloatAsSci <- function(x, dec_lwr=-2, dec_upr=2, dec_out=1){
 FormatR2PvalLab <- function(x, stacked=FALSE){
     # x should be an [1] rsq value and a [2] pvalue
     LoadPackages("stringr")
-    if(stacked){
-        out_str <- str_c("atop(italic(R)^2==", FloatAsSci(x[1]), ",italic(p)==", FloatAsSci(x[2]), ")")
+    if(x[1] == 0){
+        r2_str <- "italic(R)^2==0" 
     } else {
-        out_str <- str_c("italic(R)^2==", FloatAsSci(x[1]), "~~italic(p)==", FloatAsSci(x[2]))
+        r2_str <- str_c("italic(R)^2==", FloatAsSci(x[1]))
+    }
+
+    if(x[2] == 0){
+        pval_str <-  "italic(p) < 2.2 %*% 10^-16"
+    } else {
+            str_c("italic(p)==", FloatAsSci(x[2]))
+    }
+    
+    if(stacked){
+        out_str <- str_c("atop(", r2_str, ",", pval_str, ")")
+    } else {
+        out_str <- str_c(r2_str, "~~", pval_str)
     }
     return(out_str)
 }
