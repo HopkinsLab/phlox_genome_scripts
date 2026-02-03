@@ -1,0 +1,223 @@
+---
+title: "Figures"
+author: "Felix Wu"
+date: "2026-01-21"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+---
+
+Rmarkdown notebook for plotting the repeat figures (Figure 3 in draft manuscript)
+
+## Load packages, data
+
+Load packages
+
+```{r loadPkg, message=FALSE}
+source("../utils/genome_plots.R")
+
+req_pkgs <- c("data.table", "stringr", "ggpubr", "patchwork")
+LoadPackages(req_pkgs)
+
+SetBaseTheme(base_family="Arial", fontpath="../utils/fonts")
+```
+
+Load repeat data. This is genome assembly repeat abundances.
+```{r loadRptData}
+rpt_dat <- fread("tables/REPEAT_SUMMARY.tab", header=TRUE, sep="\t")
+rpt_dat <- dcast(rpt_dat, repID + repFamily + repOrder + repSuperfamily + repClade ~ spp, value.var=c("indRepCount", "indRepBP"))
+old_nms <- str_subset(names(rpt_dat), "_roe$") # Fix shortened roemeriana name
+setnames(rpt_dat, old_nms, str_c(old_nms, "m"))
+```
+
+Load TE-SV data. This includes counts across all SVs in a category and 
+subsamplings of SVs in the *Phlox sp.*-present category, which are required 
+for bootstrap p-value calculation.
+
+
+```{r loadTESVdata}
+nsubsamp <- 500 # This many subsamples were taken
+
+tesv_dat <- NULL
+for(nm in c("1sp", "2sp", "3sp", "pres")){
+    tmp <- fread(str_interp("te_sv_counts/te_sv_counts.${nm}.tsv"), header=TRUE)
+    if(is.null(tesv_dat)){
+        tesv_dat <- tmp
+    } else {
+        tesv_dat <- merge(tesv_dat, tmp, by="repID")
+    }
+}
+
+# Phlox sp.-present subsamples
+for(i in 1:nsubsamp){
+    tmp <- fread(str_interp("te_sv_counts/presSubsamp/te_sv_counts.presSubsamp.${i}.tsv"), 
+                 header=TRUE)
+    old_nms <- str_subset(names(tmp), "repID", negate=TRUE)
+    new_nms <- str_c(old_nms, "N", i)
+    setnames(tmp, old_nms, new_nms)
+    tesv_dat <- merge(tesv_dat, tmp, by="repID")
+}
+rm(tmp); gc()
+
+# Filter out simple repeats
+tesv_dat <- tesv_dat[!str_detect(repID, "^\\(.*n$")][!str_detect(repID, "-rich$")]
+
+# Merge with repeat data
+tesv_dat <- merge(tesv_dat, rpt_dat, by="repID", all.x=TRUE)
+for(sp in c("drum", "cusp", "roem")){
+    newcol <- str_interp("${sp}Shared")
+    newval <- tesv_dat[[str_interp("${sp}Pres")]] - tesv_dat[[str_interp("${sp}Uniq")]]
+    tesv_dat[, eval(newcol) := newval]
+}
+```
+
+Create list objects to hold plots and regression data for later joint plotting w/ patchwork
+```{r plotList}
+plist <- list()
+mlist <- list()
+```
+
+
+## TE-SV comparisons
+
+These are comparisons include:
+*  TE-SV counts vs TE-SV counts. E.g., counts for SVs found in all species vs just one species.
+*  Overall genomic abundance vs TE-SV counts
+
+First load comparisons
+
+```{r comparisonsTab}
+comp_tab <- fread("te_sv_comparisons.tsv", header=TRUE, sep="\t")
+comp_tab[, NAME := str_c(YVAR, "::", XVAR)]
+setkey(comp_tab, NAME)
+print(comp_tab)
+```
+
+### Regression
+
+Compute GLM for each comparison. We're using Negative Binomial with identity link due to 
+count data and fixing the intercept at 0 (the origin)
+
+```{r tesvGLM}
+for(nm in comp_tab[["NAME"]]){
+    xvar <- comp_tab[nm, XVAR]
+    yvar <- comp_tab[nm, YVAR]
+    # mlist[[nm]] <- RunOLS(tesv_dat, xvar = xvar, yvar = yvar)
+    # mlist[[nm]] <- RunPoisson(tesv_dat, xvar = xvar, yvar = yvar, 
+    #     link = "identity", ols_start = TRUE)
+    mlist[[nm]] <- RunNegBinom(tesv_dat, xvar = xvar, yvar = yvar, 
+          link = "identity", ols_start = TRUE)
+}
+```
+
+### Plotting
+
+Plot TE-SV counts and GLM results for each comparison.
+
+```{r plotTESV, fig.width=4, fig.height=4}
+for(nm in comp_tab[["NAME"]]){
+    m <- mlist[[nm]]
+    labelstr <- FormatR2PvalLab(c(m$rsq, m$pval), stacked=TRUE, pseudo=TRUE)
+
+    xvar <- comp_tab[nm, XVAR]
+    yvar <- comp_tab[nm, YVAR]
+
+    xlab_str <- comp_tab[nm, XLAB]
+    ylab_str <- comp_tab[nm, YLAB]
+
+    # pts_color <- ifelse(str_starts(yvar, "indRepCount"), 
+    #                     Load4SpPal()[strsplit(yvar, "_")[[1]][2]], 
+    #                     "black")
+    pts_color <- "black"
+
+    p <- ggplot() +
+        geom_point(aes(x=.data[[xvar]], y=.data[[yvar]]), data=tesv_dat, color=pts_color, alpha=0.5) +
+        geom_ribbon(aes(x=.data[[xvar]], y=.data[[yvar]], ymin=LWR, ymax=UPR), data=m$fitdat, 
+            fill="gray", color=NA, alpha=0.8) +
+        geom_line(aes(x=.data[[xvar]], y=.data[[yvar]]), data=m$fitdat, color="blue") +
+        annotate("text", x=-Inf, y=Inf, hjust=-0.1, vjust=1, label=labelstr, parse=TRUE)
+    
+    if(str_starts(xlab_str, "bquote")){
+        p <- p + xlab(eval(parse(text=xlab_str)))
+    } else {
+        p <- p + xlab(xlab_str)
+    }
+
+    if(str_starts(ylab_str, "bquote")){
+        p <- p + ylab(eval(parse(text=ylab_str)))
+    } else {
+        p <- p + ylab(ylab_str)
+    }
+    
+    plist[[nm]] <- p
+    print(p)
+}
+```
+
+## cuspPresSubsamp vs drumPresSubsamp bootstrap
+
+We observe that TE counts for SVs unique to *P. drummondii* explains less variance in 
+TE counts for SVs unique to *P. cuspidata* compared to TE counts for SVs that are merely 
+detected in the two species (i.e., not requiring uniqueness).
+
+To assess the likelihood of this observation, we take a bootstrap approach, subsampling
+the complement of SVs present in *P. drummondii* and *P. cuspidata* to match number of SVs
+found to be respectively unique and count TEs as usual. We then compute a distribution of 
+(pseudo-) R^2 values in their correlations and compare them to that observed in the unique 
+vs unique set.
+
+```{r bootPresSubsampLM}
+m_bootlist <- list()
+
+for(i in 1:nsubsamp){
+    xvar <- str_c("drumPresSubsampN", i)
+    yvar <- str_c("cuspPresSubsampN", i)
+    m_bootlist[[i]] <- RunNegBinom(tesv_dat, xvar = xvar, yvar = yvar, 
+                                link = "identity", ols_start = TRUE)
+}
+```
+
+Plot the pseudo-R^2 distribution along with observed
+```{r plotBootR2, fig.width=4, fig.height=3}
+r2_boot <- data.table(
+    RSQ = unlist(lapply(m_bootlist, function(x) x$rsq))
+)
+
+r2_obs <- mlist[["cuspUniq::drumUniq"]]$rsq
+pval <- sum(r2_obs >= r2_boot$RSQ) / nsubsamp
+if(pval == 0){
+    pval_lab <- str_c("italic(p) < ", FloatAsSci(1 / nsubsamp))
+} else {
+    pval_lab <- str_c("italic(p) == ", FloatAsSci(pval))
+}
+
+p <- ggplot(r2_boot, aes(x=RSQ)) + 
+    # geom_density(fill="steelblue1") +
+    geom_histogram(bins=nclass.FD(r2_boot$RSQ), fill="steelblue1", color="black") +
+    geom_vline(aes(xintercept = r2_obs), color="red") +
+    annotate("text", x=-Inf, y=Inf, hjust=-0.5, vjust=1, label=pval_lab, parse=TRUE) +
+    xlab(bquote("Pseudo-" * italic(R)^2)) +
+    ylab("Density")
+
+plist[["boot_hist"]] <- p
+print(p)
+```
+
+## Joint plot
+
+Use patchwork syntax to display key plots together
+
+```{r plotJoint, fig.width=10, fig.height=15}
+p1 <- plist[["indRepCount_drum::drumPres"]]
+p2 <- plist[["cuspPres::drumPres"]]
+p3 <- plist[["drumPres::drumUniq"]]
+p4 <- plist[["cuspUniq::drumUniq"]]
+p5 <- plist[["boot_hist"]]
+
+p <- p1 + p2 + p3 + p4 + p5 +
+    plot_layout(ncol=2)
+ggsave(p, file="figures.pdf", width=10, height=15)
+print(p)
+```
+

@@ -1,0 +1,13 @@
+XVAR	YVAR	XLAB	YLAB
+drumPres	indRepCount_drum	bquote(N[fam] * "[" * SV[italic(drum)] * "]")	bquote(N[fam] * "[" * Ref[italic(drum)] * "]")
+cuspPres	indRepCount_cusp	bquote(N[fam] * "[" * SV[italic(cusp)] * "]")	bquote(N[fam] * "[" * Ref[italic(cusp)] * "]")
+roemPres	indRepCount_roem	bquote(N[fam] * "[" * SV[italic(roem)] * "]")	bquote(N[fam] * "[" * Ref[italic(roem)] * "]")
+drumUniq	cuspUniq	bquote(N[fam] * "[" * SV[list(italic(drum),unique)] * "]")	bquote(N[fam] * "[" * SV[list(italic(cusp),unique)] * "]")
+drumUniq	roemUniq	bquote(N[fam] * "[" * SV[list(italic(drum),unique)] * "]")	bquote(N[fam] * "[" * SV[list(italic(roem),unique)] * "]")
+roemUniq	cuspUniq	bquote(N[fam] * "[" * SV[list(italic(roem),unique)] * "]")	bquote(N[fam] * "[" * SV[list(italic(cusp),unique)] * "]")
+drumPres	cuspPres	bquote(N[fam] * "[" * SV[italic(drum)] * "]")	bquote(N[fam] * "[" * SV[italic(cusp)] * "]")
+drumPres	roemPres	bquote(N[fam] * "[" * SV[italic(drum)] * "]")	bquote(N[fam] * "[" * SV[italic(roem)] * "]")
+roemPres	cuspPres	bquote(N[fam] * "[" * SV[italic(roem)] * "]")	bquote(N[fam] * "[" * SV[italic(cusp)] * "]")
+drumUniq	drumPres	bquote(N[fam] * "[" * SV[list(italic(drum),unique)] * "]")	bquote(N[fam] * "[" * SV[italic(drum)] * "]")
+cuspUniq	cuspPres	bquote(N[fam] * "[" * SV[list(italic(cusp),unique)] * "]")	bquote(N[fam] * "[" * SV[italic(cusp)] * "]")
+roemUniq	roemPres	bquote(N[fam] * "[" * SV[list(italic(roem),unique)] * "]")	bquote(N[fam] * "[" * SV[italic(roem)] * "]")
