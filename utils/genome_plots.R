@@ -169,6 +169,137 @@ RunOLS <- function(dat, xvar, yvar, npoints=100, level=0.95){
     return(list(model=m, pval=pval, rsq=rsq, fitdat=newdat))
 }
 
+RunPoisson <- function(dat, xvar, yvar, npoints = 100, level = 0.95, 
+                       link = "log", ols_start = FALSE, no_intercept = FALSE) {
+    
+    fmla_str <- paste(yvar, "~", xvar)
+    if(no_intercept){
+        fmla_str <- paste(fmla_str, " - 1")
+    }
+    fmla <- as.formula(fmla_str)
+
+    # Run OLS to get starting values
+    if(ols_start){
+        ols <- lm(fmla, dat)
+        start_vals <- coef(ols)
+        start_vals[1] <- max(start_vals[1], .Machine$double.eps)
+    } else {
+        start_vals <- NULL
+    }
+
+    # Fit Poisson GLM
+    m <- glm(
+        fmla, 
+        data   = dat, 
+        family = poisson(link = link),
+        start  = start_vals
+    )
+    
+    # p-value
+    pval <- summary(m)$coef[2, 4]
+    
+    # Deviance-based pseudo R^2
+    rsq <- 1 - m$deviance / m$null.deviance
+    
+    newdat <- dat[, .(X = seq(min(get(xvar)), max(get(xvar)), length.out = npoints))]
+    setnames(newdat, "X", xvar)
+    
+    # Predictions on the link scale, then transform to response
+    pr <- predict(m, newdata = newdat, type = "link", se.fit = TRUE)
+    linkinv <- m$family$linkinv
+    
+    z <- qnorm((1 + level) / 2)
+    eta_fit <- pr$fit
+    eta_lwr <- eta_fit - z * pr$se.fit
+    eta_upr <- eta_fit + z * pr$se.fit
+    
+    fit <- linkinv(eta_fit)
+    lwr <- linkinv(eta_lwr)
+    upr <- linkinv(eta_upr)
+    
+    # Fitted values and CIs on the response scale
+    newdat[, eval(yvar) := fit]
+    newdat[, LWR := lwr]
+    newdat[, UPR := upr]
+    
+    return(list(model = m, pval = pval, rsq = rsq, fitdat = newdat))
+}
+
+RunNegBinom <- function(dat, xvar, yvar, npoints = 100, level = 0.95,
+                        link = "log", ols_start = FALSE, no_intercept = FALSE) {
+    LoadPackages("MASS")
+
+    fmla_str <- paste(yvar, "~", xvar)
+    if(no_intercept){
+        fmla_str <- paste(fmla_str, " - 1")
+    }
+    fmla <- as.formula(fmla_str)
+
+    # Run OLS to get starting values
+    if (ols_start) {
+        ols <- lm(fmla, dat)
+        start_vals <- coef(ols)
+        start_vals[1] <- max(start_vals[1], .Machine$double.eps)
+    } else {
+        start_vals <- NULL
+    }
+
+    # Fit Negative Binomial GLM
+    if(link == "log"){
+        m <- MASS::glm.nb(
+            formula = fmla,
+            data    = dat,
+            link    = "log",
+            start   = start_vals
+        )
+    } else if(link == "identity"){
+        m <- MASS::glm.nb(
+            formula = fmla,
+            data    = dat,
+            link    = "identity",
+            start   = start_vals
+        )
+    } else if(link == "sqrt"){
+        m <- MASS::glm.nb(
+            formula = fmla,
+            data    = dat,
+            link    = "sqrt",
+            start   = start_vals
+        )
+    } else {
+        stop("link not recognized")
+    }
+
+    pval <- summary(m)$coef[2, 4]
+
+    # Deviance-based pseudo R^2
+    rsq <- 1 - m$deviance / m$null.deviance
+
+    newdat <- dat[, .(X = seq(min(get(xvar)), max(get(xvar)), length.out = npoints))]
+    data.table::setnames(newdat, "X", xvar)
+
+    # Predictions on the link scale, then transform to response
+    pr <- predict(m, newdata = newdat, type = "link", se.fit = TRUE)
+    linkinv <- m$family$linkinv
+
+    z <- qnorm((1 + level) / 2)
+    eta_fit <- pr$fit
+    eta_lwr <- eta_fit - z * pr$se.fit
+    eta_upr <- eta_fit + z * pr$se.fit
+
+    fit <- linkinv(eta_fit)
+    lwr <- linkinv(eta_lwr)
+    upr <- linkinv(eta_upr)
+
+    # Fitted values and CIs on the response scale
+    newdat[, (yvar) := fit]
+    newdat[, LWR := lwr]
+    newdat[, UPR := upr]
+
+    return(list(model = m, pval = pval, rsq = rsq, fitdat = newdat))
+}
+
+
 ### Plot stylings
 
 Load4SpPal <- function(pal="default"){
@@ -240,17 +371,23 @@ FloatAsSci <- function(x, dec_lwr=-2, dec_upr=2, dec_out=1){
     return(outstr)
 }
 
-FormatR2PvalLab <- function(x, stacked=FALSE){
+FormatR2PvalLab <- function(x, stacked=FALSE, pseudo=FALSE){
     # x should be an [1] rsq value and a [2] pvalue
     LoadPackages("stringr")
-    if(x[1] == 0){
-        r2_str <- "italic(R)^2==0" 
+    if(pseudo){
+        r_char <- '"Pseudo-" * italic(R)'
     } else {
-        r2_str <- str_c("italic(R)^2==", FloatAsSci(x[1]))
+        r_char <- "italic(R)"
+    }
+
+    if(x[1] == 0){
+        r2_str <- str_c(r_char, "^2==0")
+    } else {
+        r2_str <- str_c(r_char, "^2==", FloatAsSci(x[1]))
     }
 
     if(x[2] == 0){
-        pval_str <-  "italic(p) < 2.2 %*% 10^-16"
+        pval_str <- str_c("italic(p) < ", FloatAsSci(.Machine$double.eps))
     } else {
             str_c("italic(p)==", FloatAsSci(x[2]))
     }
