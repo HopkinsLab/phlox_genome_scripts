@@ -11,6 +11,8 @@ R and Rmarkdown packages were executed using R version 4.2.2.
 Required packages:
 * `data.table`
 * `string`
+* `ggpubr`
+* `patchwork`
 
 ## Execution
 
@@ -21,8 +23,11 @@ sbatch proc_summary_data.sh 1sp
 sbatch proc_summary_data.sh 2sp
 sbatch proc_summary_data.sh 3sp
 sbatch proc_summary_data.sh pres
-sbatch proc_summary_data.sh presSubsamp
+sbatch -a 1-500 proc_summary_data.sh presSubsamp
 ```
 
-Next, plotting.
+Next, plotting. This is all done in the Rmarkdown file so refer there.
 
+```
+../utils/render_rmd.R figures.Rmd
+```
