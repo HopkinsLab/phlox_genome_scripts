@@ -1,5 +1,5 @@
 ---
-title: "Figures"
+title: "Figure 3"
 author: "Felix Wu"
 date: "2026-01-21"
 output:
@@ -103,9 +103,6 @@ count data and fixing the intercept at 0 (the origin)
 for(nm in comp_tab[["NAME"]]){
     xvar <- comp_tab[nm, XVAR]
     yvar <- comp_tab[nm, YVAR]
-    # mlist[[nm]] <- RunOLS(tesv_dat, xvar = xvar, yvar = yvar)
-    # mlist[[nm]] <- RunPoisson(tesv_dat, xvar = xvar, yvar = yvar, 
-    #     link = "identity", ols_start = TRUE)
     mlist[[nm]] <- RunNegBinom(tesv_dat, xvar = xvar, yvar = yvar, 
           link = "identity", ols_start = TRUE)
 }
@@ -217,7 +214,7 @@ p5 <- plist[["boot_hist"]]
 
 p <- p1 + p2 + p3 + p4 + p5 +
     plot_layout(ncol=2)
-ggsave(p, file="figures.pdf", width=10, height=15)
+ggsave(p, file="figure3.pdf", width=10, height=15)
 print(p)
 ```
 
