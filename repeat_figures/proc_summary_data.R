@@ -23,13 +23,17 @@ if(aggr_method == "pressubsamp" || aggr_method == "pressub" || aggr_method == "p
 repeat_summary <- fread('tables/REPEAT_SUMMARY.tab', sep='\t')
 unique_repIDs <- unique(repeat_summary[, repID])
 
-sv_summary <- fread('tables/phlox_variation_summary.FINAL.tab.gz', sep='\t')
+# sv_summary <- fread('tables/phlox_variation_summary.FINAL.tab.gz', sep='\t')
+sv_summary <- fread('tables/phlox_variation_summary.omit_pdrum_REF.FINAL.tab.gz', sep='\t')
 
 # we don't need the svs with no repeats associated
 sv_summary <- sv_summary[!is.na(repID),]
 
 # we also don't need svs with missing data for sv frequency
 sv_summary <- sv_summary[!(AF_pdrum == '.'),][!(AF_proe == '.'),][!(AF_pcusp == '.'),]
+
+# we also require genotyping in all 11 individuals
+sv_summary <- sv_summary[(AN_pdrum + AN_proe + AN_pcusp) == 22,]
 
 CountUnique <- function(x, lev){
     # Count unique occurrences in "x", assuming levels "lev"
@@ -54,7 +58,7 @@ if(aggr_method == "uniq" || aggr_method == "unique" || aggr_method == "onesp" ||
     out_d <- as.data.table(out_d)
     out_d[, repID := unique_repIDs]
 
-    out_fn <- str_c(out_dir, "te_sv_counts.1sp.tsv")
+    out_fn <- str_interp("${out_dir}/te_sv_counts.1sp.tsv")
     cat(str_interp("Writing 1sp (i.e., unique) counts to ${out_fn}\n"))
 } else if(aggr_method == "twosp" || aggr_method == "2sp"){
     # 2 species counts
@@ -65,7 +69,7 @@ if(aggr_method == "uniq" || aggr_method == "unique" || aggr_method == "onesp" ||
     out_d <- as.data.table(out_d)
     out_d[, repID := unique_repIDs]
 
-    out_fn <- str_c(out_dir, "te_sv_counts.2sp.tsv")
+    out_fn <- str_interp("${out_dir}/te_sv_counts.2sp.tsv")
     cat(str_interp("Writing 2sp counts to ${out_fn}\n"))
     
 } else if(aggr_method == "threesp" || aggr_method == "3sp"){
@@ -75,7 +79,7 @@ if(aggr_method == "uniq" || aggr_method == "unique" || aggr_method == "onesp" ||
     out_d <- as.data.table(out_d)
     out_d[, repID := unique_repIDs]
 
-    out_fn <- str_c(out_dir, "te_sv_counts.3sp.tsv")
+    out_fn <- str_interp("${out_dir}/te_sv_counts.3sp.tsv")
     cat(str_interp("Writing 3sp counts to ${out_fn}\n"))
 } else if(aggr_method == "present" || aggr_method == "pres"){
     # "Present" counts (i.e., repeat present in an SV of a given species which may or may not be present in the other two species)
@@ -86,7 +90,7 @@ if(aggr_method == "uniq" || aggr_method == "unique" || aggr_method == "onesp" ||
     out_d <- as.data.table(out_d)
     out_d[, repID := unique_repIDs]
 
-    out_fn <- str_c(out_dir, "te_sv_counts.pres.tsv")
+    out_fn <- str_interp("${out_dir}/te_sv_counts.pres.tsv")
     cat(str_interp("Writing 'present' counts to ${out_fn}\n"))
 } else if(aggr_method == "pressubsamp" || aggr_method == "pressub" || aggr_method == "pressamp"){
     # Present subsamp counts (i.e., subsampling "Present" SVs to match "Unique" SV numbers)

@@ -2,7 +2,7 @@
 #
 #SBATCH -J proc_summary_data
 #SBATCH -c 1
-#SBATCH --mem-per-cpu=10G
+#SBATCH --mem-per-cpu=30G
 #SBATCH -t 0-00:30
 #SBATCH -p serial_requeue
 #SBATCH -o logs/%x.%A_%a.o
