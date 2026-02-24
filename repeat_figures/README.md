@@ -29,5 +29,5 @@ sbatch -a 1-500 proc_summary_data.sh presSubsamp
 Next, plotting. This is all done in the Rmarkdown file so refer there.
 
 ```
-../utils/render_rmd.R figures.Rmd
+../utils/render_rmd.R figure3.Rmd
 ```
