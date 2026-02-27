@@ -1,0 +1,1002 @@
+---
+title: "Figure 1"
+date: "2025-04-15"
+output: 
+    html_document:
+        toc: true
+        toc_float: true
+author: Felix L. Wu
+---
+
+
+# Setup
+
+## Load packages
+
+```{r loadPkg, message = FALSE}
+source("utils/genome_plots.R")
+
+# Install packages
+req_pkgs <- c(
+    "data.table",
+    "stringr",
+    "circlize",
+    "shades",
+    "ggpubr",
+    "ComplexHeatmap",
+    "pheatmap",
+    "RColorBrewer",
+    "patchwork",
+    "ggrepel"
+)
+LoadPackages(req_pkgs)
+
+SetBaseTheme(base_family = "Arial")
+par(family = "Arial")
+```
+
+## Plot setup
+```{r plotSettings}
+include_gaps <- FALSE # Include gaps in circle proportion plot?
+```
+
+# Load data
+
+## Genome sizes
+```{r loadGnmSize}
+ref <- fread(
+    cmd = "grep '^chr' results/ref/phlox_flye.v1.0.FINAL.fasta.fai",
+    header = FALSE,
+    select = 1:2,
+    col.names = c("CHROM", "SIZE")
+)
+ref[, CHROM := str_replace(CHROM, "chrlg", "chr")]
+```
+
+## Features 
+```{r loadFeats}
+prefix <- "results/coverage/disjoint.w_1Mb"
+midfixes <- c("gaps", "exon", "intron", "repeats.LTR", "repeats.other")
+
+gene_str <- "gene"
+intergenic_str <- "intergenic"
+
+feat_names <- c(
+    "gaps" = "gaps",
+    "exon" = "exon",
+    "intron" = "intron",
+    "repeats.LTR" = "LTR",
+    "repeats.other" = "other repeats"
+)
+
+feat_levs <- list()
+if (include_gaps) {
+    feat_levs[["ei"]] <- c("exon", "intron", "LTR",
+                           "other repeats", "gaps", intergenic_str)
+    feat_levs[["gn"]] <- c(gene_str, "LTR",
+                           "other repeats", "gaps", intergenic_str)
+} else {
+    feat_levs[["ei"]] <- c("exon", "intron",
+                           "LTR", "other repeats", intergenic_str)
+    feat_levs[["gn"]] <- c(gene_str, "LTR",
+                           "other repeats", intergenic_str)
+}
+
+dat <- list()
+dat[["ei"]] <- list()
+for (mf in midfixes) {
+    fn <- str_interp("${prefix}.${mf}.bed")
+    dat[["ei"]][[mf]] <- fread(
+        fn,
+        header = FALSE,
+        select = c(1:3, 7, 8),
+        col.names = c(
+            "CHROM",
+            "START",
+            "END",
+            "NBASE",
+            "NFEAT"
+        )
+    )
+    dat[["ei"]][[mf]][, FEATURE := feat_names[mf]]
+}
+dat[["ei"]] <- rbindlist(dat[["ei"]])
+dat[["ei"]][str_starts(CHROM, "chr"), CHROM := str_replace(CHROM, "chrlg", "chr")]
+
+tmp <- dat[["ei"]][
+    FEATURE %in% c("exon", "intron"), 
+    .(NBASE = sum(NBASE), NFEAT = sum(NFEAT), FEATURE = "gene"), 
+    by = .(CHROM, START, END)]
+dat[["gn"]] <- rbindlist(list(dat[["ei"]][!(FEATURE %in% c("exon", "intron"))], tmp))
+
+dat[["ei"]][, INDEX := str_c(CHROM, START, sep = "_")]
+dat[["gn"]][, INDEX := str_c(CHROM, START, sep = "_")]
+```
+
+Process Features
+
+```{r procFeats}
+for (nm in names(dat)) {
+    # Remove windows with excessively high gap proportion (> 90%)
+    rm_i <- dat[[nm]][str_starts(CHROM, "chr")][FEATURE == "gaps"][(NBASE /(END - START) > 0.9), INDEX]
+    dat[[nm]] <- dat[[nm]][!(INDEX %in% rm_i)]
+
+    if (include_gaps) {
+        dat[[nm]][, WSIZE := END - START]
+        dat[[nm]][, PROP_BP := NBASE / WSIZE]
+        tmp <- dat[[nm]][,
+                         .(PROP_BP = 1 - sum(PROP_BP),
+                           NBASE = NA,
+                           NFEAT = NA,
+                           FEATURE = intergenic_str),
+                         by = .(INDEX,
+                                CHROM,
+                                START,
+                                END,
+                                WSIZE)]
+        dat[[nm]] <- rbindlist(list(dat[[nm]], tmp), use.names = TRUE)
+    } else {
+        dat[[nm]] <- merge(dat[[nm]][FEATURE != "gaps"], dat[[nm]][FEATURE == "gaps", .(INDEX, NGAP = NBASE)], by = "INDEX")
+        dat[[nm]][, WSIZE := END - START - NGAP]
+        dat[[nm]][, PROP_BP := NBASE / WSIZE]
+        tmp <- dat[[nm]][, .(PROP_BP = 1 - sum(PROP_BP), NBASE = NA, NFEAT = NA, NGAP = NGAP[1], FEATURE = intergenic_str), by = .(INDEX, CHROM, START, END, WSIZE)]
+        dat[[nm]] <- rbindlist(list(dat[[nm]], tmp), use.names = TRUE)
+    }
+    dat[[nm]][, FEATURE := factor(FEATURE, levels = feat_levs[[nm]])]
+    setorder(dat[[nm]], CHROM, START, FEATURE)
+}
+
+```
+
+## Pixy data
+```{r loadPixy}
+pixy_info <- list()
+pixy_info[["wstr"]] <- "1Mb"
+pixy_info[["min_dp"]] <- 5
+
+pixy_info[["data"]] <- list()
+for (x in c("dxy", "fst", "pi")) {
+    fn <- str_interp("pixy_stats/merged.ALL.DP_${pixy_info$min_dp}.${pixy_info$wstr}_${x}.txt")
+    pixy_info[["data"]][[x]] <- fread(fn, header = TRUE, sep = "\t")
+    setnames(pixy_info[["data"]][[x]], "chromosome", "CHROM")
+    pixy_info[["data"]][[x]][, CHROM := str_replace(CHROM, "chrlg", "chr")]
+    pixy_info[["data"]][[x]][, COORD := (window_pos_1 - 1) / 1e6]
+}
+```
+
+## SVs
+```{r loadSVs}
+svs <- list()
+for (svtype in c("INS", "DEL")) {
+    for (sp in SpeciesNames()) {
+        fn <- str_interp("results/coverage/SV_${svtype}.${sp}.w_5Mb.bed")
+        svs[[fn]] <- fread(
+            cmd = str_c("grep '^chr' ", fn),
+            header = FALSE,
+            select = c(1:3,8),
+            col.names = c("CHROM", "START", "END", "COUNT"))
+        svs[[fn]][, SVTYPE := svtype]
+        svs[[fn]][, SPECIES := sp]
+    }
+}
+svs <- rbindlist(svs)
+svs[, CHROM := str_replace(CHROM, "chrlg", "chr")]
+svs[, COORD := (START) / 1e6]
+
+# SV raw genotypes
+sv_gts <- fread("results/annotations/SV.query.tsv",
+                header = TRUE,
+                na.strings = c(".", "./."))
+new_nms <- names(sv_gts)[]
+new_nms[1] <- str_remove(new_nms[1], "^# ")
+new_nms <- str_remove(new_nms, "^\\[[0-9]+\\]")
+new_nms <- str_remove(new_nms, ":GT$")
+setnames(sv_gts, names(sv_gts), new_nms)
+```
+# Circle figure
+
+## Init
+```{r circInit, fig.show = "hide"}
+tr_h <- 0.1 # A "unit" of track height to work off of
+
+circos.clear()
+circos.par( points.overflow.warning = FALSE,
+            track.height = tr_h, 
+            start.degree = 89,
+            gap.degree   = c(rep(1.5, 6), 9),
+            cell.padding = c(0, 0, 0, 0), # v, <, ^, > -- default: 0.02, 1, 0.02, 1
+            track.margin = c(0.01, 0.01)) # v, ^ -- default 0.01
+
+init_d <- ref[, .(COORD = SIZE/1e6), by = CHROM]
+init_m <- cbind(rep(0, nrow(init_d)), init_d$COORD)
+rownames(init_m) <- init_d$CHROM
+
+circos.initialize(rownames(init_m), xlim = init_m)
+
+lgd <- list()
+
+ylab_cex <- 1.3
+ylab_cex_step <- 0.2
+
+p_circ <- recordPlot()
+```
+
+## Track 1
+
+Feature data
+
+```{r circTrack1, fig.show = "hide"}
+replayPlot(p_circ)
+trN <- 1 # Track number
+
+plt_d <- dat[["gn"]][str_starts(CHROM, "chr"), .(CHROM, X = START/1e6, Y = cumsum(PROP_BP), FEATURE), by = INDEX]
+plt_d[, INDEX := NULL]
+plt_d[, CHROM := factor(CHROM, levels = str_c("chr", 1:7))]
+
+cur_ylim <- c(0, 1)
+cur_yticks <- list('raw' = seq(0, 1, by = 0.25))
+cur_yticks[["lab"]] <- sprintf("%0.2f", cur_yticks$raw)
+
+FourColorFunc <- function() {
+    return(rev(c(colorRampPalette(c("#FFFFFF", Load4SpPal("2drum")["drumPink"], "#000000"))(14)[c(2,6,10)], "#BBBBBB")))
+}
+
+FiveColorFunc <- function() {
+    return(rev(c(colorRampPalette(c("#FFFFFF", Load4SpPal("2drum")["drumPink"], "#000000"))(14)[c(2,5,8,11)], "#B8B8B8")))
+}
+if (include_gaps) {
+    # tr1_colors <- c("#999999", unname(Load4SpPal("2drum")[c(4,2,5,3)]))
+    tr1_colors <- FiveColorFunc()
+    # [1] "#B8B8B8" "#46172F" "#8D2F5E" "#C081A0" "#EFDFE7"
+    # [1] "#B8B8B8" "#3C3C3E" "#606062" "#9898A0" "#E2E2E5"
+} else {
+    # tr1_colors <- c("#999999", unname(Load4SpPal()[c(2,4,3)]))
+    tr1_colors <- FourColorFunc()
+    # [1] "#BBBBBB" "#5E1F3E" "#B06289" "#EFDFE7"
+    # [1] "#BBBBBB" "#474749" "#82828A" "#E2E2E5"
+}
+feat_order <- rev(levels(plt_d$FEATURE))
+names(tr1_colors) <- feat_order
+
+
+circos.track(   plt_d$CHROM, y = plt_d$Y, ylim = cur_ylim, bg.border = "black", track.height = tr_h * 2,
+                panel.fun = function(x, y) {
+                        circos.text(CELL_META$xcenter, 
+                                    CELL_META$cell.ylim[2] + mm_y(3.7), 
+                                    CELL_META$sector.index)
+                        circos.axis(labels.cex = 1.0)
+                    }
+            )
+
+chrom_levels <- plt_d[, levels(CHROM)]
+for (i in seq_along(chrom_levels)) {
+    chrom <- chrom_levels[i]
+    for (feat in feat_order) {
+        tmp_d <- plt_d[FEATURE == feat][CHROM == chrom]
+        circos.lines(x = tmp_d$X, y = tmp_d$Y, col = tr1_colors[feat], area = TRUE, track.index = trN, sector.index = chrom, border = NA)
+    }
+}
+
+circos.yaxis(   labels.cex = ylab_cex, sector.index = "chr1", side = "left", tick.length = convert_x(0.5, "mm", "chr1", track.index = trN),
+                at = cur_yticks$raw, labels = cur_yticks$lab, labels.niceFacing = TRUE)
+ylab_cex <- ylab_cex - ylab_cex_step
+
+# Legend
+lgd[["feat"]] <- Legend(at = names(tr1_colors), type = "grid", 
+    legend_gp = gpar(fill = unname(tr1_colors)), title_position = "topleft", 
+    title = "Feature occupancy")
+
+p_circ <- recordPlot()
+```
+
+## Tracks 2-4
+Pi estimates in drummondii, fst vs roem, fst vs cusp
+
+```{r circTrack2, warnings = FALSE, messages = FALSE, fig.show = "hide"}
+replayPlot(p_circ)
+
+MakeYticks <- function(y_max, ndiv = 2) {
+    # Assumes min Y is 0, Y >= 0.01
+    ystep <- floor(y_max * 100 / ndiv) / 100
+    return(seq(0, ystep*ndiv, by = ystep))
+}
+
+target_dark <- "#999999"
+
+track_nums <- list(drum = 2:3, roem = 4:5, cusp = 6:7)
+# names(track_nums) <- c("drum", "roem", "cusp")
+for (sp in names(track_nums)) {
+    trN <- track_nums[[sp]] # Track number
+    use_color <- Load4SpPal()[sp]
+    
+    if (sp == "drum") {
+        plt_d <- pixy_info$data$pi[pop == sp][!is.na(avg_pi), .(Y = mean(avg_pi)), by = .(CHROM, COORD = as.character(COORD))]
+    } else {
+        plt_d <- pixy_info$data$fst[(pop1 == "drum" & pop2 == sp) | (pop1 == sp & pop2 == "drum")][!is.na(avg_wc_fst),
+            .(Y = mean(avg_wc_fst)), by = .(CHROM, COORD = as.character(COORD))]
+    }
+    plt_d[, X := as.numeric(COORD)]
+
+    cur_ylim <- c(0, max(plt_d$Y))
+    print(cur_ylim)
+    cur_yticks <- list("raw" = MakeYticks(cur_ylim[2]))
+    cur_yticks[["lab"]] <- sprintf("%0.2f", cur_yticks$raw)
+    cur_yticks[["minor"]] <- lapply(cur_yticks["raw"],
+                                    function(x) sort(c(x, (x[-length(x)] + x[-1])/2)))[[1]]
+    cur_yticks[["minor"]] <- cur_yticks$minor[-1]
+
+    sv_d <- svs[SPECIES == sp,
+                .(COUNT = sum(COUNT)),
+                by = .(CHROM, COORD = as.character(COORD))]
+    sv_d[, X := as.numeric(COORD)]
+    sv_d[, Y := COUNT / max(COUNT)]
+
+    col_ramp <- colorRamp2(0:1, colors = c("#FFFFFF", BrightMatch(use_color, target_dark)))
+
+    circos.track(
+        sv_d$CHROM,
+        x = sv_d$X,
+        y = sv_d$Y,
+        ylim = c(0, 1),
+        bg.border = TRUE,
+        track.height = tr_h/5,
+        track.margin = c(0, 0.01),
+        panel.fun = function(x, y) {
+            for (i in seq_along(x)) {
+                circos.rect(x[i],
+                            CELL_META$ylim[1],
+                            x[i]+5,
+                            CELL_META$ylim[2],
+                            col = col_ramp(y[i]),
+                            border = FALSE)
+            }}
+    )
+
+    circos.track(
+        unique(plt_d$CHROM),
+        ylim = cur_ylim,
+        bg.border = NA,
+        track.margin = c(0.01, 0),
+        panel.fun = function(x, y) {
+            circos.axis(h = "bottom", major.tick = FALSE, labels = FALSE)
+        }
+    )
+    for (chrom in plt_d[, unique(CHROM)]) {
+        for (gridline in cur_yticks$minor) {
+            circos.lines(plt_d[CHROM == chrom, range(X)], rep(gridline, 2), col = "#888888", track.index = trN[2], sector.index = chrom, lty = 2, lwd = 0.5) # Axis line
+        }
+        circos.lines(plt_d[CHROM == chrom, X], plt_d[CHROM == chrom, Y], col = use_color, track.index = trN[2], sector.index = chrom) # Data
+        # circos.lines( sv_d[CHROM == chrom, X],  sv_d[CHROM == chrom, Y], col = use_colors[2], track.index = trN, sector.index = chrom)
+    }
+
+    circos.yaxis(labels.cex = ylab_cex, sector.index = "chr1", side = "left", tick.length = convert_x(0.5, "mm", "chr1", track.index = trN[2]),
+                at = cur_yticks$raw, labels = cur_yticks$lab, labels.niceFacing = TRUE)
+    ylab_cex <- ylab_cex - ylab_cex_step
+
+    # Legend
+        
+}
+col_ramp <- colorRamp2(0:1, colors = c("#FFFFFF", target_dark))
+lgd[["svs"]] <- Legend(at = seq(0, 1, by = 0.25), col_fun = col_ramp,
+    title_position = "topleft", title = "Normalized SV density")
+
+lgd[["pi_fst"]] <- Legend(at = c("Nt diversity (P. drum)", "Fst (P. roem vs. P. drum)", "Fst (P. cusp vs. P. drum)"),
+    type = "lines", legend_gp = gpar(col = Load4SpPal()[names(track_nums)]), 
+    title_position = "topleft", 
+    title = "Genetic variation")
+
+p_circ <- recordPlot()
+```
+
+## Legend
+```{r circLegend, warnings = FALSE, messages = FALSE, fig.show = "hide"}
+replayPlot(p_circ)
+
+lgd_out = packLegend(list = lgd, direction = "horizontal")
+draw(lgd_out, x = unit(4, "mm"), y = unit(4, "mm"), just = c("left", "bottom"))
+
+p_circ <- recordPlot()
+```
+
+```{r circShow, fig.width = 13.5, fig.height = 13}
+replayPlot(p_circ)
+```
+
+## Save circle figure as pdf
+```{r circSave}
+pdf(file = "figure1.circle.pdf", width = 13.5, height = 13)
+replayPlot(p_circ)
+dev.off()
+```
+
+# TE and SV figures
+
+## Load data
+```{r loadRptData}
+rpt_dat <- fread("svte_data/REPEAT_SUMMARY.tab", header = TRUE, sep = "\t")
+rpt_dat <- dcast(rpt_dat, repID + repFamily + repOrder + repSuperfamily + repClade ~ spp, value.var = c("indRepCount", "indRepBP"))
+
+# Replace "Copia" and "Gypsy" with modern naming
+for (cn in c("repFamily", "repOrder", "repSuperfamily", "repClade")) {
+    rpt_dat[get(cn) == "LTR/Copia", eval(cn) := "LTR/Ty1"]
+    rpt_dat[get(cn) == "LTR/Gypsy", eval(cn) := "LTR/Ty3"]
+}
+```
+
+```{r loadSVdata, message = FALSE, echo = FALSE}
+# qry_dat <- fread(cmd = "gunzip -c results/ref/SV_vsPilo_FINAL_SURVMERGE.AF.query.tsv.gz", header = TRUE, sep = "\t", na.strings = c(".", "./."))
+# # Ignore REF drummondii for now
+# qry_dat[, pdrum_REF := NULL]
+
+# sampnames_dat <- data.table(LONG = names(qry_dat)[-(1:13)])
+# sampnames_dat[, c("PSPECIES", "POP") := tstrsplit(str_remove(str_replace(LONG, "_Hopkins_", ":::"), "[_-].*"), ":::")]
+# sampnames_dat[, SPECIES := str_remove(PSPECIES, "^p") ]
+# sampnames_dat[SPECIES == "roe", SPECIES := "roem"]
+# sampnames_dat[, SHORT := str_c(SPECIES, "_", POP)]
+# sampnames_dat[, CN := 14:ncol(qry_dat)]
+
+# setnames(qry_dat, sampnames_dat$LONG, sampnames_dat$SHORT)
+
+# all_species <- sort(unique(sampnames_dat$SPECIES))
+
+# x <- nrow(sampnames_dat) - rowSums(is.na(qry_dat[, sampnames_dat$SHORT, with = FALSE]))
+# qry_dat[, AN := x * 2]
+# rm(x); gc()
+```
+
+```{r loadSVTEdata, message = FALSE}
+svte_dat <- NULL
+for (nm in c("1sp", "2sp", "3sp", "pres", "presSubsamp")) {
+    tmp <- fread(str_interp("svte_data/sv_te_counts.${nm}.tsv"), header = TRUE)
+    if (is.null(svte_dat)) {
+        svte_dat <- tmp
+    } else {
+        svte_dat <- merge(svte_dat, tmp, by = "repID")
+    }
+}
+rm(tmp); gc()
+
+# Filter out simple repeats
+svte_dat <- svte_dat[!str_detect(repID, "^\\(.*n$")][!str_detect(repID, "-rich$")]
+
+# Merge with repeat data
+svte_dat <- merge(svte_dat, rpt_dat, by = "repID", all.x = TRUE)
+for (sp in c("drum", "cusp", "roem")) {
+    newcol <- str_interp("${sp}Shared")
+    newval <- svte_dat[[str_interp("${sp}Pres")]] - svte_dat[[str_interp("${sp}Uniq")]]
+    svte_dat[, eval(newcol) := newval]
+}
+```
+
+## Plotting functions
+
+```{r plotPrep}
+PrepRptPlotData <- function(
+    u = "indRepBP",
+    ignore_rpts = c("Simple_repeat",
+                    "Low_complexity",
+                    "Satellite",
+                    "Unknown",
+                    "rRNA",
+                    "snRNA",
+                    "tRNA"),
+    combine_LTR = TRUE,
+    ignore_low_occup_n = 4
+) {
+    if (!(u %in% c("indRepBP", "indRepCount"))) {
+        stop(str_interp("Unit ${u} not recognized"))
+    }
+
+    cnames <- c()
+    for (sp in c("cusp", "drum", "roe", "pilo")) {
+        cnames[sp] <- str_interp("${u}_${sp}")
+    }
+
+    plt_d <- rpt_dat[!(repFamily %in% ignore_rpts),
+                     .(cusp = sum(as.numeric(get(cnames["cusp"])),
+                                  na.rm = TRUE),
+                       drum = sum(as.numeric(get(cnames["drum"])),
+                                  na.rm = TRUE),
+                       roem = sum(as.numeric(get(cnames["roe"])),
+                                  na.rm = TRUE),
+                       pilo = sum(as.numeric(get(cnames["pilo"])),
+                                  na.rm = TRUE)),
+                     by = repFamily]
+
+
+    # Sum LTR and LTR/Unknown
+    if (combine_LTR) {
+        tmp <- plt_d[repFamily == "LTR", ]
+
+        for (sp in names(plt_d)[-1]) {
+            plt_d[repFamily == "LTR/Unknown" , eval(sp) := get(sp) + tmp[[sp]]]
+        }
+        plt_d <- plt_d[repFamily != "LTR"]
+    }
+
+    # Check that lowest occupancy families are all the same
+    if (ignore_low_occup_n > 0) {
+        ii <- 1:ignore_low_occup_n
+        sp <- names(plt_d)[2]
+        low_rpt_fams <- plt_d[order(get(sp)), repFamily][ii]
+        for (sp in names(plt_d)[-(1:2)]) {
+            tmp <- plt_d[order(get(sp)), repFamily][ii]
+            if (length(setdiff(low_rpt_fams, tmp)) + length(setdiff(tmp, low_rpt_fams)) > 0) {
+                stop("Not all lowest occupancy families are the same across species")
+            }
+        }
+        plt_d <- plt_d[!(repFamily %in% low_rpt_fams)]
+    }
+    return(plt_d)
+}
+
+nbases <- c()
+for (sp in SpeciesNames(outgroup = TRUE)) {
+    nbases[sp] <- sum( fread(str_interp("results/ref/${sp}.fasta.fai"), header = FALSE)$V2) - 
+                       fread(str_interp("results/ref/${sp}.gaps.sum"), header = FALSE)$V1
+}
+
+ryb_pal <- colorRampPalette(rev(brewer.pal(n = 11, name = "RdYlBu")))
+```
+
+
+## Plot repeats as pie chart
+
+### Repeats only
+
+```{r plotRawPie, fig.width = 4, fig.height = 4}
+plt_d <- PrepRptPlotData()
+
+nr <- nrow(plt_d)
+use_col <- get_palette("d3", k = min(10, nr))
+
+for (sp in names(plt_d)[-1]) {
+    pie(plt_d[[sp]], labels = plt_d$repFamily, main = sp, col = use_col)
+}
+```
+
+### Plot drummondii repeats along with gene content
+
+```{r plotDrumPie, fig.width = 6, fig.height = 6}
+plt_d <- PrepRptPlotData(
+    ignore_rpts = c(),
+    ignore_low_occup_n = 0
+)[, .(repFamily, drum)]
+
+# Combine DNA, LINE elements
+for (fam in c("DNA", "LINE")) {
+    sub_d <- plt_d[str_starts(repFamily, fam)]
+    cur_sum <- sub_d[, sum(drum)]
+    plt_d <- rbind(
+        plt_d[!(repFamily %in% sub_d[["repFamily"]])], 
+        data.table(repFamily = fam, drum = cur_sum)
+    )
+}
+
+# LTR/Other
+sub_d <- plt_d[str_starts(repFamily, "LTR/") & !(repFamily %in% c("LTR/Ty1", "LTR/Ty3", "LTR/Unknown"))]
+cur_sum <- sub_d[, sum(drum)]
+plt_d <- rbind(
+    plt_d[!(repFamily %in% sub_d[["repFamily"]])],
+    data.table(repFamily = "LTR/Other", drum = cur_sum)
+)
+
+# RNA
+sub_d <- plt_d[str_ends(repFamily, "RNA")]
+cur_sum <- sub_d[, sum(drum)]
+plt_d <- rbind(
+    plt_d[!(repFamily %in% sub_d[["repFamily"]])],
+    data.table(repFamily = "RNA", drum = cur_sum)
+)
+
+setorderv(plt_d, "drum", order = -1L)
+
+# Combine with overall proportions of features
+all_feat <- dat[["ei"]][,
+                        .(PROP = sum(PROP_BP * WSIZE) / sum(WSIZE)),
+                        by = FEATURE]
+tmp <- all_feat[, PROP]
+names(tmp) <- all_feat[, FEATURE]
+all_feat <- tmp
+
+blist <- list(
+    data.table(repFamily = c("exon", "intron"),
+               FEATURE = c("exon", "intron"),
+               count = all_feat[c("exon", "intron")]),
+    data.table(repFamily = intergenic_str,
+               FEATURE = intergenic_str,
+               count = all_feat[intergenic_str]),
+    plt_d[str_starts(repFamily, "LTR"),
+          .(repFamily,
+            FEATURE = "LTR",
+            count = all_feat["LTR"]* drum / sum(drum))],
+    plt_d[!str_starts(repFamily, "LTR"),
+          .(repFamily,
+            FEATURE = "other repeats",
+            count = all_feat["other repeats"]* drum / sum(drum))]
+)
+plt_d <- rbindlist(blist)
+plt_d[repFamily %in% c("exon", "intron"), FEATURE := "gene"]
+plt_d[, FEATURE := factor(FEATURE, levels = feat_levs$gn)]
+setorderv(plt_d, c("FEATURE", "count"), order = c(1L, -1L))
+plt_d[, repFamily := factor(repFamily, levels = unique(repFamily))]
+
+radii <- c(2, 1)
+
+inner_d <- plt_d[, .(count = sum(count)), by = FEATURE]
+inner_c <- rev(FourColorFunc())
+names(inner_c) <- levels(inner_d$FEATURE)
+
+gene_c <- colorRampPalette(inner_c[1:2])(3)[1:2]
+names(gene_c) <- c("exon", "intron")
+
+nms <- plt_d[FEATURE == "LTR", as.character(unique(repFamily))]
+ltr_c <- colorRampPalette(c(inner_c["LTR"], "#928CE0"))(length(nms))
+names(ltr_c) <- nms
+
+nms <- plt_d[FEATURE == "other repeats", as.character(unique(repFamily))]
+oth_c <- colorRampPalette(c(inner_c["other repeats"],
+                          Load4SpPal()["roem"]))(length(nms))
+names(oth_c) <- nms
+
+use_colors <- c(gene_c,
+                inner_c,
+                ltr_c,
+                oth_c)
+
+inner_d[, X := radii[1] / 2]
+inner_d[, X_LAB := X]
+inner_d[FEATURE == gene_str, X_LAB := X_LAB + 0.63]
+inner_d[FEATURE == intergenic_str, X_LAB := X_LAB + 0.55]
+# inner_d[FEATURE == "exon", X_LAB := X_LAB + 0.45]
+# inner_d[FEATURE == "intron", X_LAB := X_LAB - 0.1]
+inner_d[.N:1, Y := cumsum(count)]
+inner_d[.N:1, Y_LAB := (Y + c(0, cumsum(count[-.N]))) / 2]
+inner_d[, LABEL := str_c(FEATURE, sprintf("\n(%0.1f%%)", count * 100))]
+inner_d[, LAB_C := "black"]
+inner_d[FEATURE == "other repeats", LAB_C := "white"]
+
+plt_d[, X := radii[1] + radii[2] / 2]
+plt_d[, X_LAB := sum(radii) + 0.25]
+plt_d[FEATURE == "gene", X_LAB := radii[1] + 0.25]
+plt_d[  FEATURE == "other repeats" & repFamily != "Unknown", 
+        X_LAB := X_LAB + 0.1]
+plt_d[.N:1, Y := cumsum(count)]
+plt_d[.N:1, Y_LAB := (Y + c(0, cumsum(count[-.N]))) / 2]
+plt_d[  FEATURE == "other repeats" & repFamily != "Unknown", 
+        Y_LAB := median(range(Y_LAB)) + seq(-0.028, 0.028, length.out = .N)[order(Y)]]
+plt_d[, VJUST := 0.5  + 0.5 * sin(2 * pi * Y_LAB)]
+plt_d[, HJUST := 0.5  - 0.5 * cos(2 * pi * Y_LAB)]
+plt_d[, ANGLE := 0]
+plt_d[FEATURE == "other repeats" & repFamily != "Unknown",
+      ANGLE := Y_LAB * 360]
+plt_d[, LABEL := str_replace(as.character(repFamily), "_", " ")]
+plt_d[FEATURE == "gene",
+      LABEL := str_c(repFamily, sprintf(" (%0.1f%%)", count * 100))]
+
+p <- ggplot() + 
+    geom_bar(aes(x = X, y = count, fill = repFamily), data = plt_d, 
+        stat = "identity", position = "stack", width = radii[2], color = NA) +
+    geom_bar(aes(x = X, y = count, fill = FEATURE), data = inner_d, 
+        stat = "identity", position = "stack", width = radii[1], color = NA) +
+    scale_fill_manual(values = use_colors, guide = "none") +
+    geom_vline(xintercept = radii[1], color = "white")
+
+for (i in 1:nrow(inner_d)) {
+    p <- p + annotate(geom = "line", x = c(0, sum(radii)), y = inner_d[i, rep(Y, 2)], color = "white")
+}
+p <- p + 
+    geom_text(aes(x = X_LAB,
+                  y = Y_LAB,
+                  label = LABEL),
+              data = inner_d[LAB_C == "black"],
+              size = 2.8,
+              hjust = 0.5,
+              vjust = 0.5,
+              color = "black") +
+    geom_text(aes(x = X_LAB,
+                  y = Y_LAB,
+                  label = LABEL),
+              data = inner_d[LAB_C == "white"], 
+              size = 2.8,
+              hjust = 0.5,
+              vjust = 0.5,
+              color = "white") +
+    geom_text(aes(x = X_LAB,
+                  y = Y_LAB,
+                  label = LABEL,
+                  hjust = HJUST,
+                  vjust = VJUST,
+                  angle = ANGLE,
+                  color = repFamily),
+              data = plt_d[!(FEATURE %in% c(intergenic_str, "gene"))],
+              size = 3) +
+    scale_color_manual(values = use_colors, guide = "none") +
+    geom_text(aes(x = X_LAB,
+                  y = Y_LAB,
+                  label = LABEL,
+                  hjust = HJUST,
+                  vjust = VJUST,
+                  angle = ANGLE),
+              data = plt_d[FEATURE %in% "gene"],
+              color = "black",
+              size = 3) +
+    coord_radial(theta = "y",
+                 expand = FALSE,
+                 start = -pi / 2,
+                 direction = -1L) +
+    theme(axis.line = element_blank(),
+          axis.ticks = element_blank(),
+          axis.title = element_blank(),
+          axis.text = element_blank())
+print(p)
+# ggsave(p, file = "tmp.pdf", width = 6, height = 6)
+```
+
+## Plot repeats as lollipop
+```{r plotRawLollipop, fig.width = 7, fig.height = 3.5}
+plt_d <- PrepRptPlotData()
+for (sp in SpeciesNames(outgroup = TRUE)) {
+    plt_d[, eval(sp) := get(sp) / 1e6]
+}
+levs <- plt_d[, repFamily[order(drum, decreasing = FALSE)]]
+tmp_d <- plt_d[, .(repFamily, pilo)]
+plt_d <- melt(plt_d,
+              id.vars = "repFamily",
+              variable.name = "SPECIES",
+              value.name = "BP")
+plt_d <- merge(plt_d, tmp_d, by = "repFamily")
+plt_d[, RelativeOccupancy := log2((BP / nbases[SPECIES]) / (pilo / nbases["pilo"]))]
+plt_d[, repFamily := factor(repFamily, levels = levs)]
+plt_d[, SPECIES := factor(ConvertSpeciesNames(as.character(SPECIES),
+                                              "short",
+                                              "g_species"),
+                          levels = ConvertSpeciesNames(c("roem", "drum", "cusp", "pilo"),
+                                                       "short",
+                                                       "g_species"))]
+
+leg_lim <- c(1 / 3, 3)
+leg_breaks <- c(1/2, 1, 2)
+leg_labs <- sprintf("%0.1fX", leg_breaks)
+
+p <- ggplot(plt_d[SPECIES != "P. pilosa"]) +
+    geom_segment(aes(x = 0,
+                     xend = BP,
+                     y = repFamily,
+                     yend = repFamily)) +
+    geom_point(aes(x = BP,
+                   y = repFamily,
+                   fill = RelativeOccupancy),
+               shape = 21,
+               size = 3.7) +
+    scale_fill_gradientn(colors = ryb_pal(100),
+                         breaks = log2(leg_breaks),
+                         labels = leg_labs,
+                         limits = log2(leg_lim)) +
+    facet_wrap(vars(SPECIES), nrow = 1) +
+    xlab("Amount of sequence (Mb)") +
+    ylab("Repeat family") +
+    theme_bw() +
+    guides(fill = guide_colorbar(title = "Sequence occupancy\nrelative to pilosa",
+                                 direction = "horizontal")) +
+    theme(legend.position = "top", panel.grid.major.y = element_blank(),
+          strip.text = (fontface = element_text(face = "italic")))
+print(p)
+
+ggsave(p, file = "figure1.rpt_fam.pdf", width = 7, height = 3.5)
+```
+
+## Heatmap relative to pilosa
+
+Plot overview of repeat family occupancy relative to pilosa
+
+```{r plotRelativeHeat, fig.width = 3.5, fig.height = 4.5}
+plt_d <- PrepRptPlotData()
+
+# Convert to occupancy
+for (sp in names(plt_d)[-1]) {
+    plt_d[, eval(sp) := get(sp) / nbases[sp]]
+}
+
+
+title_str <- "Repeat family occupancy\nrelative to P. pilosa"
+plt_m <- log2(as.matrix(plt_d[, .(cusp = cusp/pilo, drum = drum/pilo, roem = roem/pilo)]))
+
+rownames(plt_m) <- plt_d[, repFamily]
+rownames(plt_m)[which(rownames(plt_m) == "DNA")] <- "DNA/Unknown"
+# annot_colors <- list("row")
+
+maxval <- max(abs(range(plt_m)))
+use_breaks <- seq(-maxval, maxval, length.out = 101)
+
+leg_breaks <- c(1/3, 1/2, 1, 2, 3)
+leg_labs <- sprintf("%0.1fX", leg_breaks)
+
+#out_fn <- "te_fig.repFamily.indRepCount.heatmap.pdf"
+pheatmap(plt_m, scale = "none", border_color = "#ffffff",
+         color = colorRampPalette(rev(brewer.pal(n = 7, name = "RdYlBu")))(100),
+         cluster_cols = TRUE,
+         legend_breaks = log2(leg_breaks),
+         legend_labels = leg_labs,
+         breaks = use_breaks,
+         # annotation_colors = annot_colors,
+         treeheight_row = 25,
+         treeheight_col = 10,
+         main = title_str,
+         # filename = out_fn,
+         width = 3.5, height = 4.5)
+```
+
+# P-values
+
+## Gene vs repeat overlaps
+
+This was computed as part of the snakemake pipeline using 
+1000 randomly shuffled gene intervals
+
+```{r GeneRepeatOverlap}
+pval <- fread("results/annotations/genes.rpt_overlap.pval.txt",
+              header = FALSE)$V1
+cat(str_interp("p = ${pval} (1000 replicates)\n"))
+```
+
+## Compute SV-intron/exon/intergenic location overlap
+
+We make the simplifying assumption that SVs are points and so 
+overlap is determined exclusively by the start position. So in 
+effect we ignore cases where a deletion might extend into a 
+feature interval.
+
+### Load data
+
+```{r LoadSvOverlaps}
+sv_overlaps <- list()
+for (feat in c("exons", "introns", "genes")) {
+    fn <- str_interp("results/sv_overlap/${feat}.overlaps.bed")
+    sv_overlaps[[feat]] <- fread(
+        fn,
+        header = FALSE,
+        select = c(1, 3:6),
+        col.names = c("CHROM", "POS", "ID", "SVLEN", "SVTYPE")
+    )
+    sv_overlaps[[feat]][, FEATURE := feat]
+}
+
+cnames <- names(sv_overlaps$genes)[-ncol(sv_overlaps$genes)]
+sv_overlaps[["intergenic"]] <- sv_gts[!(ID %in% sv_overlaps$genes$ID),
+                                      cnames,
+                                      with = FALSE]
+sv_overlaps[["intergenic"]][, FEATURE := "intergenic"]
+sv_overlaps <- rbindlist(sv_overlaps)
+
+uniq_bp <- c()
+for (feat in c("exons", "introns", "genes")) {
+    fn <- str_interp("results/annotations/${feat}.uniq_bp.txt")
+    uniq_bp[feat] <- fread(fn, header = FALSE)$V1
+}
+fn <- "results/annotations/gaps.bed"
+uniq_bp["gaps"] <- fread(fn, header = FALSE)[, sum(V3 - V2)]
+
+fn <- "results/ref/phlox_flye.v1.0.FINAL.fasta.fai"
+uniq_bp["total"] <- fread(fn, header = FALSE)[, sum(V2)] - uniq_bp["gaps"]
+
+uniq_bp["intergenic"] <- uniq_bp["total"] - uniq_bp["genes"]
+```
+
+### Compute p-value
+```{r SvOverlapPvalues}
+sv_counts <- sv_overlaps[, table(FEATURE)]
+overlap_tests <- list()
+for (feat in names(sv_counts)) {
+    overlap_tests[[feat]] <- list(FEATURE = feat)
+    x <- sv_counts[feat]
+    n <- nrow(sv_gts)
+    overlap_tests[[feat]][["EXP"]] <- feat_prop <- uniq_bp[feat] / uniq_bp["total"]
+    for(alt in c("less", "greater")){
+        overlap_tests[[feat]][[alt]] <- binom.test(x, n, feat_prop, alt)$p.value
+    }
+    overlap_tests[[feat]][["OBS"]] <- x / n
+    
+}
+overlap_tests <- rbindlist(overlap_tests)
+```
+
+### Plot SV occupancy per megabase
+```{r PlotSvOverlap, fig.width=4, fig.height=4}
+plt_d <- sv_overlaps[, .N, by = .(FEATURE, SVTYPE)]
+setnames(plt_d, c("N", "SVTYPE"), c("SVs", "SV type"))
+
+nms <- sv_overlaps[, unique(FEATURE)]
+plt_d <- merge(plt_d, list(FEATURE=nms, BP=uniq_bp[nms]), by="FEATURE")
+
+plt_d[, Y := SVs / (BP / 1e6)]
+
+levs <- plt_d[, sum(Y), by = FEATURE][,
+    FEATURE[order(V1, decreasing = TRUE)]]
+plt_d[, FEATURE := factor(FEATURE, levels = levs)]
+levs <- c("INS", "DEL", "INV", "DUP")
+plt_d[, `SV type` := factor(`SV type`, levels = levs)]
+
+annot_d <- overlap_tests[greater < 0.001]
+
+annot_d <- merge(annot_d,
+                 plt_d[, .(Y = sum(Y) + 10), by = FEATURE],
+                 by = "FEATURE")
+
+p <- ggbarplot(plt_d,
+               x = "FEATURE",
+               y = "Y",
+               fill = "SV type",
+               palette = "d3") +
+    geom_text(aes(label = "***"), data = annot_d) +
+    xlab("Genomic feature") +
+    ylab("SVs per feature megabase")
+print(p)
+# ggsave(p, file = "tmp.pdf", width = 3, height = 4)
+```
+
+## Pi values in different partitions of the genome_plots
+
+### Load Data
+```{r LoadPiData}
+pi_info <- list()
+pi_info[["min_dp"]] <- 5
+
+feat_levels <- c("exon", "intron", "near_gene", "intergenic")
+
+tmp_d <- list()
+for (feat in feat_levels) {
+    cmd <- str_interp("tail -q -n+2 pi_stats/${feat}/merged.chr[1-8].ALL_REPS.DP_${pi_info$min_dp}.counts.tsv")
+    x <- fread(cmd = cmd, header = FALSE, col.names = c("NUM", "DEN"))
+    x[, REP := rep(seq(1, 5), 8)]
+    tmp_d[[feat]] <- x[, .(PI = sum(NUM) / sum(DEN)), by = REP]
+    tmp_d[[feat]][, FEATURE := feat]
+}
+pi_info[["data"]] <- rbindlist(tmp_d)
+pi_info[["data"]][, FEATURE := factor(FEATURE, levels = feat_levels)]
+
+tmp_d <- list()
+for (feat in "exon") {
+    fn <- str_interp("pi_stats/${feat}/merged.ALL_CHR.ALL_REPS.DP_${pi_info$min_dp}.bootstrap.pi.tsv")
+    tmp_d[[feat]] <- fread(fn, header = TRUE)
+    tmp_d[[feat]][, BOOT_I := .I]
+    tmp_d[[feat]][, FEATURE := feat]
+}
+pi_info[["boot"]] <- rbindlist(tmp_d)
+```
+
+### P-value for exons
+
+How reduced are exons relative to background? Used randomly 
+shuffled exon intervals across genome to bootstrap a distribution
+
+```{r PiExonPval}
+pt_est <- pi_info$data[FEATURE == "exon", median(PI)]
+nboot <- pi_info$boot[FEATURE == "exon", .N]
+pval <- pi_info$boot[FEATURE == "exon", sum(PI < pt_est) / nboot]
+pval <- str_interp(ifelse(pval == 0, "p < ${1 / nboot}", "p = ${pval}"))
+
+cat("P-value for pi less than that observed in exons:\n", pval, "\n", sep="")
+```
+
+### Plot pi values
+Note that near_genes is the 1kb up- and down-stream of a gene feature.
+```{r plotPiSupplement, fig.width=4.5, fig.height=3}
+plt_d <- pi_info$data[, QuantileOverReplicates(PI, prefixes = "PI"), by = FEATURE]
+p <- ggplot(plt_d, aes(x = FEATURE, y = PI_med)) +
+    geom_bar(aes(fill = FEATURE), stat = "identity") +
+    geom_linerange(aes(ymin = PI_lwr, ymax = PI_upr), color = "black") +
+    xlab("Feature") +
+    ylab("Nucleotide diversity") +
+    theme_pubr() +
+    theme(legend.position = "none")
+
+print(p)
+print(plt_d)
+```
+
+# Save for debugging
+```{r saveDebug}
+save.image("results/figure1.Rdata")
+#load("results/figure1.Rdata")
+```
