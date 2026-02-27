@@ -1,0 +1,32 @@
+import os
+
+
+configfile: "config/config.yaml"
+
+rule all:
+    input: 
+        expand("results/coverage/{annot_type}.w_{wname}.bed", 
+               annot_type=config["gffs"],
+               wname="5Mb"),
+        expand("results/coverage/SV_{sv_type}.{sv_sp}.w_{wname}.bed", 
+               sv_type=["INS", "DEL"],
+               sv_sp=config["svs"]["samples"].keys(),
+               wname="5Mb"),
+       # expand("results/coverage/SV_{sv_type}_AC{sv_ac}.w_{wname}.bed", 
+       #         sv_type=["INS", "DEL"],
+       #         sv_ac=[i+1 for i in range(2 * len(config["svs"]["samples"]))],
+       #         wname="5Mb"),
+       #  "results/annotations/translocations.tsv",
+        "results/coverage/disjoint.w_500kb.done",
+        "results/coverage/disjoint.w_1Mb.done",
+        "results/annotations/genes.rpt_overlap.pval.txt",
+        "results/annotations/SV.query.tsv",
+        expand("results/sv_overlap/{annot_type}.overlaps.bed",
+               annot_type=["genes", "introns", "exons"]),
+        expand("results/annotations/{annot_type}.uniq_bp.txt",
+               annot_type=["genes", "introns", "exons"]),
+
+include: "workflow/rules/annot_proc.smk"
+
+
+
