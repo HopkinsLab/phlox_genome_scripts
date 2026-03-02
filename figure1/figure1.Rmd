@@ -14,7 +14,7 @@ author: Felix L. Wu
 ## Load packages
 
 ```{r loadPkg, message = FALSE}
-source("utils/genome_plots.R")
+source("../utils/genome_plots.R")
 
 # Install packages
 req_pkgs <- c(
@@ -31,7 +31,7 @@ req_pkgs <- c(
 )
 LoadPackages(req_pkgs)
 
-SetBaseTheme(base_family = "Arial")
+SetBaseTheme(base_family = "Arial", fontpath = "../utils/fonts")
 par(family = "Arial")
 ```
 
@@ -156,7 +156,7 @@ pixy_info[["min_dp"]] <- 5
 
 pixy_info[["data"]] <- list()
 for (x in c("dxy", "fst", "pi")) {
-    fn <- str_interp("pixy_stats/merged.ALL.DP_${pixy_info$min_dp}.${pixy_info$wstr}_${x}.txt")
+    fn <- str_interp("pixy_stats/merged.ALL.DP_${pixy_info$min_dp}.${pixy_info$wstr}_${x}.txt.gz")
     pixy_info[["data"]][[x]] <- fread(fn, header = TRUE, sep = "\t")
     setnames(pixy_info[["data"]][[x]], "chromosome", "CHROM")
     pixy_info[["data"]][[x]][, CHROM := str_replace(CHROM, "chrlg", "chr")]
@@ -188,7 +188,7 @@ sv_gts <- fread("results/annotations/SV.query.tsv",
                 header = TRUE,
                 na.strings = c(".", "./."))
 new_nms <- names(sv_gts)[]
-new_nms[1] <- str_remove(new_nms[1], "^# ")
+new_nms[1] <- str_remove(new_nms[1], "^#\\s*")
 new_nms <- str_remove(new_nms, "^\\[[0-9]+\\]")
 new_nms <- str_remove(new_nms, ":GT$")
 setnames(sv_gts, names(sv_gts), new_nms)
@@ -413,7 +413,7 @@ dev.off()
 
 ## Load data
 ```{r loadRptData}
-rpt_dat <- fread("svte_data/REPEAT_SUMMARY.tab", header = TRUE, sep = "\t")
+rpt_dat <- fread("../repeat_figures/tables/REPEAT_SUMMARY.tab", header = TRUE, sep = "\t")
 rpt_dat <- dcast(rpt_dat, repID + repFamily + repOrder + repSuperfamily + repClade ~ spp, value.var = c("indRepCount", "indRepBP"))
 
 # Replace "Copia" and "Gypsy" with modern naming
@@ -423,50 +423,7 @@ for (cn in c("repFamily", "repOrder", "repSuperfamily", "repClade")) {
 }
 ```
 
-```{r loadSVdata, message = FALSE, echo = FALSE}
-# qry_dat <- fread(cmd = "gunzip -c results/ref/SV_vsPilo_FINAL_SURVMERGE.AF.query.tsv.gz", header = TRUE, sep = "\t", na.strings = c(".", "./."))
-# # Ignore REF drummondii for now
-# qry_dat[, pdrum_REF := NULL]
 
-# sampnames_dat <- data.table(LONG = names(qry_dat)[-(1:13)])
-# sampnames_dat[, c("PSPECIES", "POP") := tstrsplit(str_remove(str_replace(LONG, "_Hopkins_", ":::"), "[_-].*"), ":::")]
-# sampnames_dat[, SPECIES := str_remove(PSPECIES, "^p") ]
-# sampnames_dat[SPECIES == "roe", SPECIES := "roem"]
-# sampnames_dat[, SHORT := str_c(SPECIES, "_", POP)]
-# sampnames_dat[, CN := 14:ncol(qry_dat)]
-
-# setnames(qry_dat, sampnames_dat$LONG, sampnames_dat$SHORT)
-
-# all_species <- sort(unique(sampnames_dat$SPECIES))
-
-# x <- nrow(sampnames_dat) - rowSums(is.na(qry_dat[, sampnames_dat$SHORT, with = FALSE]))
-# qry_dat[, AN := x * 2]
-# rm(x); gc()
-```
-
-```{r loadSVTEdata, message = FALSE}
-svte_dat <- NULL
-for (nm in c("1sp", "2sp", "3sp", "pres", "presSubsamp")) {
-    tmp <- fread(str_interp("svte_data/sv_te_counts.${nm}.tsv"), header = TRUE)
-    if (is.null(svte_dat)) {
-        svte_dat <- tmp
-    } else {
-        svte_dat <- merge(svte_dat, tmp, by = "repID")
-    }
-}
-rm(tmp); gc()
-
-# Filter out simple repeats
-svte_dat <- svte_dat[!str_detect(repID, "^\\(.*n$")][!str_detect(repID, "-rich$")]
-
-# Merge with repeat data
-svte_dat <- merge(svte_dat, rpt_dat, by = "repID", all.x = TRUE)
-for (sp in c("drum", "cusp", "roem")) {
-    newcol <- str_interp("${sp}Shared")
-    newval <- svte_dat[[str_interp("${sp}Pres")]] - svte_dat[[str_interp("${sp}Uniq")]]
-    svte_dat[, eval(newcol) := newval]
-}
-```
 
 ## Plotting functions
 
@@ -509,7 +466,7 @@ PrepRptPlotData <- function(
         tmp <- plt_d[repFamily == "LTR", ]
 
         for (sp in names(plt_d)[-1]) {
-            plt_d[repFamily == "LTR/Unknown" , eval(sp) := get(sp) + tmp[[sp]]]
+            plt_d[repFamily == "LTR/Unknown", eval(sp) := get(sp) + tmp[[sp]]]
         }
         plt_d <- plt_d[repFamily != "LTR"]
     }
@@ -530,11 +487,10 @@ PrepRptPlotData <- function(
     return(plt_d)
 }
 
-nbases <- c()
-for (sp in SpeciesNames(outgroup = TRUE)) {
-    nbases[sp] <- sum( fread(str_interp("results/ref/${sp}.fasta.fai"), header = FALSE)$V2) - 
-                       fread(str_interp("results/ref/${sp}.gaps.sum"), header = FALSE)$V1
-}
+nbases <- c("cusp" = 5159793837,
+            "drum" = 6290703384,
+            "roem" = 7002483497,
+            "pilo" = 6890161404)
 
 ryb_pal <- colorRampPalette(rev(brewer.pal(n = 11, name = "RdYlBu")))
 ```
