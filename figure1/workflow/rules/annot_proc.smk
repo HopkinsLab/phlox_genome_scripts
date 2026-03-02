@@ -42,7 +42,7 @@ rule make_windows:
         "../envs/bedtools.yml"
     shell:
         """
-        module load R/4.2.2-fasrc01
+        module load R/4.2.2-fasrc01; module load gcc/12.2.0-fasrc01
         wsize=$( workflow/scripts/wsize2wname.R {wildcards.wname} )
         bedtools makewindows -g {input} -w $wsize > {output}
         """
@@ -124,7 +124,7 @@ rule annotate_repeat_families:
         partition = "serial_requeue" 
     shell:
         """
-        module load R/4.2.2-fasrc01
+        module load R/4.2.2-fasrc01; module load gcc/12.2.0-fasrc01
         workflow/scripts/annotate_repeat_families.R {input.bed} {input.rpt_fai}
         """
 
