@@ -204,49 +204,11 @@ setnames(sv_gts, names(sv_gts), new_nms)
 
 ## Plotting
 
-### Init
-```{r circInit, fig.show = "hide"}
+All plotting is done in a single function in order to allow for combining with other 
+plots downstream with patchwork.
 
-tr_h <- 0.1 # A "unit" of track height to work off of
-
-circos.clear()
-circos.par(points.overflow.warning = FALSE,
-           track.height = tr_h,
-           start.degree = 89,
-           gap.degree   = c(rep(1.5, 6), 9),
-           cell.padding = c(0, 0, 0, 0), # v, <, ^, > -- default: 0.02, 1, 0.02, 1
-           track.margin = c(0.01, 0.01)) # v, ^ -- default 0.01
-
-init_d <- ref[, .(COORD = SIZE / 1e6), by = CHROM]
-init_m <- cbind(rep(0, nrow(init_d)), init_d$COORD)
-rownames(init_m) <- init_d$CHROM
-
-circos.initialize(rownames(init_m), xlim = init_m)
-
-lgd <- list()
-
-ylab_cex <- 1.3
-ylab_cex_step <- 0.2
-
-p_circ <- recordPlot()
-```
-
-### Track 1
-
-Feature data
-
-```{r circTrack1, fig.show = "hide"}
-replayPlot(p_circ)
-trN <- 1 # Track number # nolint
-
-plt_d <- dat[["gn"]][str_starts(CHROM, "chr"), .(CHROM, X = START / 1e6, Y = cumsum(PROP_BP), FEATURE), by = INDEX]
-plt_d[, INDEX := NULL]
-plt_d[, CHROM := factor(CHROM, levels = str_c("chr", 1:7))]
-
-cur_ylim <- c(0, 1)
-cur_yticks <- list("raw" = seq(0, 1, by = 0.25))
-cur_yticks[["lab"]] <- sprintf("%0.2f", cur_yticks$raw)
-
+### Circos function
+```{r circPlotFuncs, warnings = FALSE, messages = FALSE}
 FourColorFunc <- function() {
     rev(c(colorRampPalette(c("#FFFFFF", Load4SpPal("2drum")["drumPink"], "#000000"))(14)[c(2, 6, 10)], "#BBBBBB"))
 }
@@ -254,176 +216,210 @@ FourColorFunc <- function() {
 FiveColorFunc <- function() {
     rev(c(colorRampPalette(c("#FFFFFF", Load4SpPal("2drum")["drumPink"], "#000000"))(14)[c(2, 5, 8, 11)], "#B8B8B8"))
 }
-if (include_gaps) {
-    tr1_colors <- FiveColorFunc()
-} else {
-    tr1_colors <- FourColorFunc()
-}
-feat_order <- rev(levels(plt_d$FEATURE))
-names(tr1_colors) <- feat_order
 
+CircosPlot <- function() {
+    require(circlize)
+    require(data.table)
+    require(stringr)
+    require(ComplexHeatmap)
+    require(grid)
 
-circos.track(
-    plt_d$CHROM,
-    y = plt_d$Y,
-    ylim = cur_ylim,
-    bg.border = "black",
-    track.height = tr_h * 2,
-    panel.fun = function(x, y) {
-        circos.text(CELL_META$xcenter,
-                    CELL_META$cell.ylim[2] + mm_y(3.7),
-                    CELL_META$sector.index)
-        circos.axis(labels.cex = 1.0)
-    }
-)
+    #########################
+    # [ Init ]
+    tr_h <- 0.1 # A "unit" of track height to work off of
 
-chrom_levels <- plt_d[, levels(CHROM)]
-for (i in seq_along(chrom_levels)) {
-    chrom <- chrom_levels[i]
-    for (feat in feat_order) {
-        tmp_d <- plt_d[FEATURE == feat][CHROM == chrom]
-        circos.lines(x = tmp_d$X, y = tmp_d$Y, col = tr1_colors[feat], area = TRUE, track.index = trN, sector.index = chrom, border = NA)
-    }
-}
+    circos.clear()
+    circos.par(points.overflow.warning = FALSE,
+               track.height = tr_h,
+               start.degree = 89,
+               gap.degree   = c(rep(1.5, 6), 9),
+               cell.padding = c(0, 0, 0, 0), # v, <, ^, > -- default: 0.02, 1, 0.02, 1
+               track.margin = c(0.01, 0.01)) # v, ^ -- default 0.01
 
-circos.yaxis(
-    labels.cex = ylab_cex,
-    sector.index = "chr1",
-    side = "left",
-    tick.length = convert_x(0.5, "mm", "chr1", track.index = trN),
-    at = cur_yticks$raw,
-    labels = cur_yticks$lab,
-    labels.niceFacing = TRUE
-)
-ylab_cex <- ylab_cex - ylab_cex_step
+    init_d <- ref[, .(COORD = SIZE / 1e6), by = CHROM]
+    init_m <- cbind(rep(0, nrow(init_d)), init_d$COORD)
+    rownames(init_m) <- init_d$CHROM
 
-# Legend
-lgd[["feat"]] <- Legend(at = names(tr1_colors), type = "grid",
-                        legend_gp = gpar(fill = unname(tr1_colors)), title_position = "topleft",
-                        title = "Feature occupancy")
+    circos.initialize(rownames(init_m), xlim = init_m)
 
-p_circ <- recordPlot()
-```
+    lgd <- list()
 
-### Tracks 2-4
-Pi estimates in drummondii, fst vs roem, fst vs cusp
+    ylab_cex <- 1.3
+    ylab_cex_step <- 0.2
 
-```{r circTrack2, warnings = FALSE, messages = FALSE, fig.show = "hide"}
-replayPlot(p_circ)
+    ###########################
+    # [ Track 1: Feature data ]
+    trN <- 1 # Track number # nolint
 
-MakeYticks <- function(y_max, ndiv = 2) {
-    # Assumes min Y is 0, Y >= 0.01
-    ystep <- floor(y_max * 100 / ndiv) / 100
-    return(seq(0, ystep * ndiv, by = ystep))
-}
+    plt_d <- dat[["gn"]][str_starts(CHROM, "chr"), .(CHROM, X = START / 1e6, Y = cumsum(PROP_BP), FEATURE), by = INDEX]
+    plt_d[, INDEX := NULL]
+    plt_d[, CHROM := factor(CHROM, levels = str_c("chr", 1:7))]
 
-target_dark <- "#999999"
-
-track_nums <- list(drum = 2:3, roem = 4:5, cusp = 6:7)
-# names(track_nums) <- c("drum", "roem", "cusp")
-for (sp in names(track_nums)) {
-    trN <- track_nums[[sp]] # Track number # nolint: object_name_linter.
-    use_color <- Load4SpPal()[sp]
-
-    if (sp == "drum") {
-        plt_d <- pixy_info$data$pi[pop == sp][!is.na(avg_pi), .(Y = mean(avg_pi)), by = .(CHROM, COORD = as.character(COORD))]
-    } else {
-        plt_d <- pixy_info$data$fst[
-            (pop1 == "drum" & pop2 == sp) | (pop1 == sp & pop2 == "drum")
-        ][
-            !is.na(avg_wc_fst),
-            .(Y = mean(avg_wc_fst)), by = .(CHROM, COORD = as.character(COORD))
-        ]
-    }
-    plt_d[, X := as.numeric(COORD)]
-
-    cur_ylim <- c(0, max(plt_d$Y))
-    print(cur_ylim)
-    cur_yticks <- list("raw" = MakeYticks(cur_ylim[2]))
+    cur_ylim <- c(0, 1)
+    cur_yticks <- list("raw" = seq(0, 1, by = 0.25))
     cur_yticks[["lab"]] <- sprintf("%0.2f", cur_yticks$raw)
-    cur_yticks[["minor"]] <- lapply(cur_yticks["raw"],
-                                    function(x) sort(c(x, (x[-length(x)] + x[-1]) / 2)))[[1]]
-    cur_yticks[["minor"]] <- cur_yticks$minor[-1]
 
-    sv_d <- svs[SPECIES == sp,
-                .(COUNT = sum(COUNT)),
-                by = .(CHROM, COORD = as.character(COORD))]
-    sv_d[, X := as.numeric(COORD)]
-    sv_d[, Y := COUNT / max(COUNT)]
+    if (include_gaps) {
+        tr1_colors <- FiveColorFunc()
+    } else {
+        tr1_colors <- FourColorFunc()
+    }
+    feat_order <- rev(levels(plt_d$FEATURE))
+    names(tr1_colors) <- feat_order
 
-    col_ramp <- colorRamp2(0:1, colors = c("#FFFFFF", BrightMatch(use_color, target_dark)))
 
     circos.track(
-        sv_d$CHROM,
-        x = sv_d$X,
-        y = sv_d$Y,
-        ylim = c(0, 1),
-        bg.border = TRUE,
-        track.height = tr_h / 5,
-        track.margin = c(0, 0.01),
-        panel.fun = function(x, y) {
-            for (i in seq_along(x)) {
-                circos.rect(x[i],
-                            CELL_META$ylim[1],
-                            x[i] + 5,
-                            CELL_META$ylim[2],
-                            col = col_ramp(y[i]),
-                            border = FALSE)
-            }
-        }
-    )
-
-    circos.track(
-        unique(plt_d$CHROM),
+        plt_d$CHROM,
+        y = plt_d$Y,
         ylim = cur_ylim,
-        bg.border = NA,
-        track.margin = c(0.01, 0),
+        bg.border = "black",
+        track.height = tr_h * 2,
         panel.fun = function(x, y) {
-            circos.axis(h = "bottom", major.tick = FALSE, labels = FALSE)
+            circos.text(CELL_META$xcenter,
+                        CELL_META$cell.ylim[2] + mm_y(3.7),
+                        CELL_META$sector.index)
+            circos.axis(labels.cex = 1.0)
         }
     )
-    for (chrom in plt_d[, unique(CHROM)]) {
-        for (gridline in cur_yticks$minor) {
-            circos.lines(plt_d[CHROM == chrom, range(X)], rep(gridline, 2), col = "#888888", track.index = trN[2], sector.index = chrom, lty = 2, lwd = 0.5) # Axis line
+
+    chrom_levels <- plt_d[, levels(CHROM)]
+    for (i in seq_along(chrom_levels)) {
+        chrom <- chrom_levels[i]
+        for (feat in feat_order) {
+            tmp_d <- plt_d[FEATURE == feat][CHROM == chrom]
+            circos.lines(x = tmp_d$X, y = tmp_d$Y, col = tr1_colors[feat], area = TRUE, track.index = trN, sector.index = chrom, border = NA)
         }
-        circos.lines(plt_d[CHROM == chrom, X], plt_d[CHROM == chrom, Y], col = use_color, track.index = trN[2], sector.index = chrom) # Data
-        # circos.lines( sv_d[CHROM == chrom, X],  sv_d[CHROM == chrom, Y], col = use_colors[2], track.index = trN, sector.index = chrom)
     }
 
-    circos.yaxis(labels.cex = ylab_cex, sector.index = "chr1", side = "left", tick.length = convert_x(0.5, "mm", "chr1", track.index = trN[2]),
-                 at = cur_yticks$raw, labels = cur_yticks$lab, labels.niceFacing = TRUE)
+    circos.yaxis(
+        labels.cex = ylab_cex,
+        sector.index = "chr1",
+        side = "left",
+        tick.length = convert_x(0.5, "mm", "chr1", track.index = trN),
+        at = cur_yticks$raw,
+        labels = cur_yticks$lab,
+        labels.niceFacing = TRUE
+    )
     ylab_cex <- ylab_cex - ylab_cex_step
+
+    ## Build up legend
+    lgd[["feat"]] <- Legend(at = names(tr1_colors), type = "grid",
+                            legend_gp = gpar(fill = unname(tr1_colors)), title_position = "topleft",
+                            title = "Feature occupancy")
+
+    ######################################################################
+    # [ Tracks 2-4: Pi estimates in drummondii, fst vs roem, fst vs cusp ]
+    MakeYticks <- function(y_max, ndiv = 2) {
+        # Assumes min Y is 0, Y >= 0.01
+        ystep <- floor(y_max * 100 / ndiv) / 100
+        return(seq(0, ystep * ndiv, by = ystep))
+    }
+
+    target_dark <- "#999999"
+
+    track_nums <- list(drum = 2:3, roem = 4:5, cusp = 6:7)
+    for (sp in names(track_nums)) {
+        trN <- track_nums[[sp]] # Track number # nolint: object_name_linter.
+        use_color <- Load4SpPal()[sp]
+
+        if (sp == "drum") {
+            plt_d <- pixy_info$data$pi[pop == sp][!is.na(avg_pi), .(Y = mean(avg_pi)), by = .(CHROM, COORD = as.character(COORD))]
+        } else {
+            plt_d <- pixy_info$data$fst[
+                (pop1 == "drum" & pop2 == sp) | (pop1 == sp & pop2 == "drum")
+            ][
+                !is.na(avg_wc_fst),
+                .(Y = mean(avg_wc_fst)), by = .(CHROM, COORD = as.character(COORD))
+            ]
+        }
+        plt_d[, X := as.numeric(COORD)]
+
+        cur_ylim <- c(0, max(plt_d$Y))
+        print(cur_ylim)
+        cur_yticks <- list("raw" = MakeYticks(cur_ylim[2]))
+        cur_yticks[["lab"]] <- sprintf("%0.2f", cur_yticks$raw)
+        cur_yticks[["minor"]] <- lapply(cur_yticks["raw"],
+                                        function(x) sort(c(x, (x[-length(x)] + x[-1]) / 2)))[[1]]
+        cur_yticks[["minor"]] <- cur_yticks$minor[-1]
+
+        sv_d <- svs[SPECIES == sp,
+                    .(COUNT = sum(COUNT)),
+                    by = .(CHROM, COORD = as.character(COORD))]
+        sv_d[, X := as.numeric(COORD)]
+        sv_d[, Y := COUNT / max(COUNT)]
+
+        col_ramp <- colorRamp2(0:1, colors = c("#FFFFFF", BrightMatch(use_color, target_dark)))
+
+        circos.track(
+            sv_d$CHROM,
+            x = sv_d$X,
+            y = sv_d$Y,
+            ylim = c(0, 1),
+            bg.border = TRUE,
+            track.height = tr_h / 5,
+            track.margin = c(0, 0.01),
+            panel.fun = function(x, y) {
+                for (i in seq_along(x)) {
+                    circos.rect(x[i],
+                                CELL_META$ylim[1],
+                                x[i] + 5,
+                                CELL_META$ylim[2],
+                                col = col_ramp(y[i]),
+                                border = FALSE)
+                }
+            }
+        )
+
+        circos.track(
+            unique(plt_d$CHROM),
+            ylim = cur_ylim,
+            bg.border = NA,
+            track.margin = c(0.01, 0),
+            panel.fun = function(x, y) {
+                circos.axis(h = "bottom", major.tick = FALSE, labels = FALSE)
+            }
+        )
+        for (chrom in plt_d[, unique(CHROM)]) {
+            for (gridline in cur_yticks$minor) {
+                circos.lines(plt_d[CHROM == chrom, range(X)], rep(gridline, 2), col = "#888888", track.index = trN[2], sector.index = chrom, lty = 2, lwd = 0.5) # Axis line
+            }
+            circos.lines(plt_d[CHROM == chrom, X], plt_d[CHROM == chrom, Y], col = use_color, track.index = trN[2], sector.index = chrom) # Data
+        }
+
+        circos.yaxis(labels.cex = ylab_cex, sector.index = "chr1", side = "left", tick.length = convert_x(0.5, "mm", "chr1", track.index = trN[2]),
+                     at = cur_yticks$raw, labels = cur_yticks$lab, labels.niceFacing = TRUE)
+        ylab_cex <- ylab_cex - ylab_cex_step
+    }
+
+    ## Add to legend
+    col_ramp <- colorRamp2(0:1, colors = c("#FFFFFF", target_dark))
+    lgd[["svs"]] <- Legend(at = seq(0, 1, by = 0.25), col_fun = col_ramp,
+                           title_position = "topleft", title = "Normalized SV density")
+
+    lgd[["pi_fst"]] <- Legend(at = c("Nt diversity (P. drum)", "Fst (P. roem vs. P. drum)", "Fst (P. cusp vs. P. drum)"),
+                              type = "lines", legend_gp = gpar(col = Load4SpPal()[names(track_nums)]),
+                              title_position = "topleft",
+                              title = "Genetic variation")
+
+    ####################
+    # [Finalize: Legend]
+
+    lgd_out <- packLegend(list = lgd, direction = "horizontal")
+    draw(lgd_out, x = unit(4, "mm"), y = unit(4, "mm"), just = c("left", "bottom"))
 }
-col_ramp <- colorRamp2(0:1, colors = c("#FFFFFF", target_dark))
-lgd[["svs"]] <- Legend(at = seq(0, 1, by = 0.25), col_fun = col_ramp,
-                       title_position = "topleft", title = "Normalized SV density")
-
-lgd[["pi_fst"]] <- Legend(at = c("Nt diversity (P. drum)", "Fst (P. roem vs. P. drum)", "Fst (P. cusp vs. P. drum)"),
-                          type = "lines", legend_gp = gpar(col = Load4SpPal()[names(track_nums)]),
-                          title_position = "topleft",
-                          title = "Genetic variation")
-
-p_circ <- recordPlot()
 ```
 
-### Legend
-```{r circLegend, warnings = FALSE, messages = FALSE, fig.show = "hide"}
-replayPlot(p_circ)
-
-lgd_out <- packLegend(list = lgd, direction = "horizontal")
-draw(lgd_out, x = unit(4, "mm"), y = unit(4, "mm"), just = c("left", "bottom"))
-
-p_circ <- recordPlot()
-```
-
+### Show plot inline
 ```{r circShow, fig.width = 13.5, fig.height = 13}
-replayPlot(p_circ)
+CircosPlot()
+dev.off()
 ```
+
 
 ### Save circle figure as pdf
 ```{r circSave}
 pdf(file = "figure1.circle.pdf", width = 13.5, height = 13)
-replayPlot(p_circ)
+CircosPlot()
 dev.off()
 ```
 
@@ -700,6 +696,8 @@ p <- p +
           axis.ticks = element_blank(),
           axis.title = element_blank(),
           axis.text = element_blank())
+
+plist[["pie"]] <- p
 print(p)
 # ggsave(p, file = "tmp.pdf", width = 6, height = 6)
 ```
@@ -777,7 +775,6 @@ plt_m <- log2(as.matrix(plt_d[, .(cusp = cusp / pilo, drum = drum / pilo, roem =
 
 rownames(plt_m) <- plt_d[, repFamily]
 rownames(plt_m)[which(rownames(plt_m) == "DNA")] <- "DNA/Unknown"
-# annot_colors <- list("row")
 
 maxval <- max(abs(range(plt_m)))
 use_breaks <- seq(-maxval, maxval, length.out = 101)
