@@ -45,6 +45,7 @@ par(family = "Arial")
 ## Plot setup
 ```{r plotSettings}
 include_gaps <- FALSE # Include gaps in circle proportion plot?
+plist <- list()
 ```
 
 # Circle figure
@@ -747,6 +748,8 @@ p <- ggplot(plt_d[SPECIES != "P. pilosa"]) +
           strip.text = (fontface = element_text(face = "italic")))
 print(p)
 
+plist[["rpt_fam"]] <- p
+
 ggsave(p, file = "figure1.rpt_fam.pdf", width = 7, height = 3.5)
 ```
 
@@ -791,6 +794,86 @@ pheatmap(plt_m, scale = "none", border_color = "#ffffff",
          width = 3.5, height = 4.5)
 ```
 
+# Population sampling map
+
+## Load data
+
+Load map data ...
+```{r loadMapData}
+world <- ne_countries(scale = "medium", returnclass = "sf")
+states <- st_as_sf(map("state", plot = FALSE, fill = TRUE))
+
+img <- readPNG("map_data/habitat_range.png") # PNG of habitat range to overlay
+g_hab <- rasterGrob(img, interpolate = TRUE)
+```
+
+... and population sampling locations
+```{r loadSamplingLoc}
+pops <- fread("map_data/metadata.population.csv", header = TRUE)
+pops[, is_annual := species %in% SpeciesNames(outgroup = FALSE)]
+pops[, species := ConvertSpeciesNames(species, "short", "g_species")]
+
+pops_sdf_all <- st_as_sf(pops,
+                         coords = c("long", "lat"),
+                         crs = 4326)
+pops_sdf_ann <- st_as_sf(pops[(is_annual)],
+                         coords = c("long", "lat"),
+                         crs = 4326)
+```
+
+## Plot
+
+### Annuals + outgroup (*P. pilosa*)
+```{r plotMapAll, fig.width=13, fig.height=10}
+use_pal <- Load4SpPal()
+names(use_pal) <- ConvertSpeciesNames(names(use_pal), "short", "g_species")
+
+mapall <- ggplot(data = world) +
+    geom_sf() +
+    geom_sf(data = states, fill = "white") +
+    #geom_sf(data = cities_sdf) +
+    geom_sf(data = pops_sdf_all, aes(color = species, shape = Seq),
+            alpha = 1, size = 2.5) +
+    scale_shape_manual(values = c(16, 8)) +
+    scale_color_manual(values = use_pal) +
+    annotation_scale(location = "bl", width_hint = 0.5,
+                     pad_y = unit(0.15, "cm"),
+                     pad_x = unit(0.3, "cm")) +
+    annotation_north_arrow(location = "bl", which_north = "true", height = unit(1, "cm"), width = unit(0.75, "cm"),
+                           pad_x = unit(0.2, "in"), pad_y = unit(0.5, "in"),
+                           style = north_arrow_orienteering) +
+    coord_sf(xlim = c(-101.5, -81), ylim = c(36.5, 26)) +
+    theme_bw()
+print(mapall)
+```
+
+### Annuals only
+```{r plotMapAnnuals, fig.width=13, fig.height=10}
+pal_ann <- Load4SpPal()[SpeciesNames(outgroup = FALSE)]
+names(pal_ann) <- ConvertSpeciesNames(names(pal_ann), "short", "g_species")
+
+mapannual <- ggplot(data = world) +
+    geom_sf() +
+    geom_sf(data = states, fill = "white") +
+    #geom_sf(data = cities_sdf) +
+    geom_sf(data = pops_sdf_ann, aes(color = species, shape = Seq),
+            alpha = 1, size = 6) +
+    scale_shape_manual(values = c(20, 8)) +
+    scale_color_manual(values = use_pal) +
+    annotation_scale(location = "bl", width_hint = 0.5,
+                     pad_y = unit(0.15, "cm"),
+                     pad_x = unit(0.3, "cm")) +
+    annotation_north_arrow(location = "bl", which_north = "true", height = unit(1, "cm"), width = unit(0.75, "cm"),
+                           pad_x = unit(0.2, "in"), pad_y = unit(0.5, "in"),
+                           style = north_arrow_orienteering) +
+    coord_sf(xlim = c(-101.5, -95.5), ylim = c(32.5, 27.5)) +
+    annotation_custom(g_hab, xmin = -101.3619, xmax = -94.98436, ymin = 28.24768, ymax = 32.60038) +
+    theme_bw(base_size = 22)
+
+print(mapannual)
+plist[["map"]] <- mapannual
+ggsave(file = "figure1.map.pdf", plot = mapannual, width = 13, height = 10)
+```
 
 # P-value calculations
 
