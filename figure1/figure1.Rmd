@@ -27,7 +27,14 @@ req_pkgs <- c(
     "pheatmap",
     "RColorBrewer",
     "patchwork",
-    "ggrepel"
+    "ggrepel",
+    "gridExtra",
+    "rnaturalearth",
+    "sf",
+    "maps",
+    "ggspatial",
+    "png",
+    "grid"
 )
 LoadPackages(req_pkgs)
 
@@ -40,9 +47,11 @@ par(family = "Arial")
 include_gaps <- FALSE # Include gaps in circle proportion plot?
 ```
 
-# Load data
+# Circle figure
 
-## Genome sizes
+## Load data
+
+### Genome sizes
 ```{r loadGnmSize}
 ref <- fread(
     cmd = "grep '^chr' results/ref/phlox_flye.v1.0.FINAL.fasta.fai",
@@ -53,7 +62,7 @@ ref <- fread(
 ref[, CHROM := str_replace(CHROM, "chrlg", "chr")]
 ```
 
-## Features 
+### Features 
 ```{r loadFeats}
 prefix <- "results/coverage/disjoint.w_1Mb"
 midfixes <- c("gaps", "exon", "intron", "repeats.LTR", "repeats.other")
@@ -148,7 +157,7 @@ for (nm in names(dat)) {
 
 ```
 
-## Pixy data
+### Pixy data
 ```{r loadPixy}
 pixy_info <- list()
 pixy_info[["wstr"]] <- "1Mb"
@@ -164,7 +173,7 @@ for (x in c("dxy", "fst", "pi")) {
 }
 ```
 
-## SVs
+### SVs
 ```{r loadSVs}
 svs <- list()
 for (svtype in c("INS", "DEL")) {
@@ -193,9 +202,10 @@ new_nms <- str_remove(new_nms, "^\\[[0-9]+\\]")
 new_nms <- str_remove(new_nms, ":GT$")
 setnames(sv_gts, names(sv_gts), new_nms)
 ```
-# Circle figure
 
-## Init
+## Plotting
+
+### Init
 ```{r circInit, fig.show = "hide"}
 tr_h <- 0.1 # A "unit" of track height to work off of
 
@@ -221,7 +231,7 @@ ylab_cex_step <- 0.2
 p_circ <- recordPlot()
 ```
 
-## Track 1
+### Track 1
 
 Feature data
 
@@ -289,7 +299,7 @@ lgd[["feat"]] <- Legend(at = names(tr1_colors), type = "grid",
 p_circ <- recordPlot()
 ```
 
-## Tracks 2-4
+### Tracks 2-4
 Pi estimates in drummondii, fst vs roem, fst vs cusp
 
 ```{r circTrack2, warnings = FALSE, messages = FALSE, fig.show = "hide"}
@@ -388,7 +398,7 @@ lgd[["pi_fst"]] <- Legend(at = c("Nt diversity (P. drum)", "Fst (P. roem vs. P. 
 p_circ <- recordPlot()
 ```
 
-## Legend
+### Legend
 ```{r circLegend, warnings = FALSE, messages = FALSE, fig.show = "hide"}
 replayPlot(p_circ)
 
@@ -402,7 +412,7 @@ p_circ <- recordPlot()
 replayPlot(p_circ)
 ```
 
-## Save circle figure as pdf
+### Save circle figure as pdf
 ```{r circSave}
 pdf(file = "figure1.circle.pdf", width = 13.5, height = 13)
 replayPlot(p_circ)
@@ -422,8 +432,6 @@ for (cn in c("repFamily", "repOrder", "repSuperfamily", "repClade")) {
     rpt_dat[get(cn) == "LTR/Gypsy", eval(cn) := "LTR/Ty3"]
 }
 ```
-
-
 
 ## Plotting functions
 
@@ -689,7 +697,7 @@ print(p)
 # ggsave(p, file = "tmp.pdf", width = 6, height = 6)
 ```
 
-## Plot repeats as lollipop
+### Plot repeats as lollipop
 ```{r plotRawLollipop, fig.width = 7, fig.height = 3.5}
 plt_d <- PrepRptPlotData()
 for (sp in SpeciesNames(outgroup = TRUE)) {
@@ -742,7 +750,7 @@ print(p)
 ggsave(p, file = "figure1.rpt_fam.pdf", width = 7, height = 3.5)
 ```
 
-## Heatmap relative to pilosa
+### Heatmap relative to pilosa
 
 Plot overview of repeat family occupancy relative to pilosa
 
@@ -783,7 +791,8 @@ pheatmap(plt_m, scale = "none", border_color = "#ffffff",
          width = 3.5, height = 4.5)
 ```
 
-# P-values
+
+# P-value calculations
 
 ## Gene vs repeat overlaps
 
@@ -935,7 +944,7 @@ pval <- str_interp(ifelse(pval == 0, "p < ${1 / nboot}", "p = ${pval}"))
 cat("P-value for pi less than that observed in exons:\n", pval, "\n", sep="")
 ```
 
-### Plot pi values
+#### Plot pi values
 Note that near_genes is the 1kb up- and down-stream of a gene feature.
 ```{r plotPiSupplement, fig.width=4.5, fig.height=3}
 plt_d <- pi_info$data[, QuantileOverReplicates(PI, prefixes = "PI"), by = FEATURE]
