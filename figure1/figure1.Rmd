@@ -29,6 +29,7 @@ req_pkgs <- c(
     "patchwork",
     "ggrepel",
     "gridExtra",
+    "cowplot",
     "rnaturalearth",
     "sf",
     "maps",
@@ -217,6 +218,20 @@ FiveColorFunc <- function() {
     rev(c(colorRampPalette(c("#FFFFFF", Load4SpPal("2drum")["drumPink"], "#000000"))(14)[c(2, 5, 8, 11)], "#B8B8B8"))
 }
 
+if (include_gaps) {
+    tr1_colors <- FiveColorFunc()
+} else {
+    tr1_colors <- FourColorFunc()
+}
+
+tmp <- dat[["gn"]][str_starts(CHROM, "chr"), .(CHROM, X = START / 1e6, Y = cumsum(PROP_BP), FEATURE), by = INDEX]
+names(tr1_colors) <- rev(levels(tmp$FEATURE))
+
+target_dark <- "#999999"
+
+track_nums <- list(drum = 2:3, roem = 4:5, cusp = 6:7)
+
+
 CircosPlot <- function() {
     require(circlize)
     require(data.table)
@@ -242,7 +257,6 @@ CircosPlot <- function() {
 
     circos.initialize(rownames(init_m), xlim = init_m)
 
-    lgd <- list()
 
     ylab_cex <- 1.3
     ylab_cex_step <- 0.2
@@ -259,11 +273,6 @@ CircosPlot <- function() {
     cur_yticks <- list("raw" = seq(0, 1, by = 0.25))
     cur_yticks[["lab"]] <- sprintf("%0.2f", cur_yticks$raw)
 
-    if (include_gaps) {
-        tr1_colors <- FiveColorFunc()
-    } else {
-        tr1_colors <- FourColorFunc()
-    }
     feat_order <- rev(levels(plt_d$FEATURE))
     names(tr1_colors) <- feat_order
 
@@ -302,10 +311,6 @@ CircosPlot <- function() {
     )
     ylab_cex <- ylab_cex - ylab_cex_step
 
-    ## Build up legend
-    lgd[["feat"]] <- Legend(at = names(tr1_colors), type = "grid",
-                            legend_gp = gpar(fill = unname(tr1_colors)), title_position = "topleft",
-                            title = "Feature occupancy")
 
     ######################################################################
     # [ Tracks 2-4: Pi estimates in drummondii, fst vs roem, fst vs cusp ]
@@ -315,9 +320,6 @@ CircosPlot <- function() {
         return(seq(0, ystep * ndiv, by = ystep))
     }
 
-    target_dark <- "#999999"
-
-    track_nums <- list(drum = 2:3, roem = 4:5, cusp = 6:7)
     for (sp in names(track_nums)) {
         trN <- track_nums[[sp]] # Track number # nolint: object_name_linter.
         use_color <- Load4SpPal()[sp]
@@ -335,7 +337,7 @@ CircosPlot <- function() {
         plt_d[, X := as.numeric(COORD)]
 
         cur_ylim <- c(0, max(plt_d$Y))
-        print(cur_ylim)
+
         cur_yticks <- list("raw" = MakeYticks(cur_ylim[2]))
         cur_yticks[["lab"]] <- sprintf("%0.2f", cur_yticks$raw)
         cur_yticks[["minor"]] <- lapply(cur_yticks["raw"],
@@ -390,8 +392,16 @@ CircosPlot <- function() {
                      at = cur_yticks$raw, labels = cur_yticks$lab, labels.niceFacing = TRUE)
         ylab_cex <- ylab_cex - ylab_cex_step
     }
+}
 
-    ## Add to legend
+CircosLegend <- function() {
+    lgd <- list()
+
+    ## Build up legend
+    lgd[["feat"]] <- Legend(at = names(tr1_colors), type = "grid",
+                            legend_gp = gpar(fill = unname(tr1_colors)), title_position = "topleft",
+                            title = "Feature occupancy")
+
     col_ramp <- colorRamp2(0:1, colors = c("#FFFFFF", target_dark))
     lgd[["svs"]] <- Legend(at = seq(0, 1, by = 0.25), col_fun = col_ramp,
                            title_position = "topleft", title = "Normalized SV density")
@@ -401,17 +411,23 @@ CircosPlot <- function() {
                               title_position = "topleft",
                               title = "Genetic variation")
 
-    ####################
-    # [Finalize: Legend]
-
-    lgd_out <- packLegend(list = lgd, direction = "horizontal")
+    # Finalize and draw
+    # lgd_out <- packLegend(list = lgd, direction = "horizontal")
+    lgd_out <- packLegend(list = lgd, direction = "horizontal", max_width = unit(80, "mm"))
     draw(lgd_out, x = unit(4, "mm"), y = unit(4, "mm"), just = c("left", "bottom"))
+    # [ Resulting dimensions are 3.5"W vs 2"H]
 }
 ```
 
 ### Show plot inline
 ```{r circShow, fig.width = 13.5, fig.height = 13}
 CircosPlot()
+dev.off()
+```
+
+And the legend
+```{r circLegendShow, fig.width = 3.5, fig.height = 2}
+CircosLegend()
 dev.off()
 ```
 
