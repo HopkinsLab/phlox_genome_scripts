@@ -1,132 +1,175 @@
 #!/usr/bin/env Rscript
 
 ### Package management
-LoadPackages <- function(req_pkgs, repos="https://cloud.r-project.org/"){
-    for(pkg in req_pkgs){
-        if(!require(pkg, character.only=TRUE)){install.packages(pkg, repos=repos); library(pkg, character.only=TRUE)}
+LoadPackages <- function(req_pkgs, repos = "https://cloud.r-project.org/") {
+    for (pkg in req_pkgs) {
+        if (!require(pkg, character.only = TRUE)) {
+            install.packages(pkg, repos = repos)
+            library(pkg, character.only = TRUE)
+        }
     }
 }
 
-LoadEEMSplotLib <- function(){
-    LoadPackages("devtools")
-    if(!require("reemsplots2", character.only=TRUE)){
+LoadEEMSplotLib <- function() {
+    require(devtools)
+
+    if (!require("reemsplots2", character.only = TRUE)) {
         install_github("dipetkov/reemsplots2")
-        library("reemsplots2", character.only=TRUE)
+        library("reemsplots2", character.only = TRUE)
     }
+}
+
+LoadAsyntLib <- function(commit = NULL) {
+    require(stringr)
+
+    tmpdir <- tempdir() # nolint: object_usage_linter.
+    system(str_interp("git clone https://github.com/simonhmartin/asynt.git ${tmpdir}"))
+    system(str_interp("cd ${tmpdir}; git checkout 1889d10f6598d8b03473531bc396fb08424b9dbe"))
+    source(str_interp("${tmpdir}/asynt.R"))
 }
 
 ### Paths
 # plink_path <- "/n/holylfs05/LABS/hopkins_lab/Lab/software/plink_linux/plink"
 
 ### Species naming
-SpeciesNames <- function(kind="short", outgroup=FALSE){
-    LoadPackages("data.table")
+SpeciesNames <- function(kind = "short", outgroup = FALSE) {
+    require(data.table)
+
     name_tab <- data.table(
-        SHORT=c("cusp", "drum", "roem", "pilo"),
-        LONG =c("cuspidata", "drummondii", "roemeriana", "pilosa"),
-        ONT  =c("pcusp", "pdrum", "proe", "ppilo"),
-        G_SPECIES=c("P. cuspidata", "P. drummondii", "P. roemeriana", "P. pilosa")
+        SHORT = c("cusp", "drum", "roem", "pilo"),
+        LONG  = c("cuspidata", "drummondii", "roemeriana", "pilosa"),
+        ONT   = c("pcusp", "pdrum", "proe", "ppilo"),
+        G_SPECIES = c("P. cuspidata", "P. drummondii", "P. roemeriana", "P. pilosa")
     )
 
     kind <- tolower(kind)
-    if(kind %in% c("short", "ddrad")){
+    if (kind %in% c("short", "ddrad")) {
         cn <- "SHORT"
-    } else if(kind %in% c("long")){
+    } else if (kind %in% c("long")) {
         cn <- "LONG"
-    } else if(kind %in% c("ont")){
+    } else if (kind %in% c("ont")) {
         cn <- "ONT"
-    } else if(kind %in% c("g_species")){
+    } else if (kind %in% c("g_species")) {
         cn <- "G_SPECIES"
     } else {
         stop(paste0("kind '", kind, "' not recognized"))
     }
 
-    if(outgroup){
+    if (outgroup) {
         out_sp <- name_tab[[cn]]
     } else {
-        out_sp <- name_tab[-4,][[cn]]
+        out_sp <- name_tab[-4, ][[cn]]
     }
-    
+
     return(out_sp)
 }
 
-ConvertSpeciesNames <- function(sp_nm, kind1="short", kind2="g_species"){
-    LoadPackages("data.table")
-    map_tab <- data.table(  K1=SpeciesNames(kind1, outgroup=TRUE),
-                            K2=SpeciesNames(kind2, outgroup=TRUE))
+ConvertSpeciesNames <- function(sp_nm, kind1 = "short", kind2 = "g_species") {
+    require(data.table)
+    K1 <- K2 <- NULL
+
+    map_tab <- data.table(K1 = SpeciesNames(kind1, outgroup = TRUE),
+                          K2 = SpeciesNames(kind2, outgroup = TRUE))
     setkey(map_tab, K1)
     return(map_tab[sp_nm, K2])
 }
 
+### Sample naming
+RenameWGS <- function(x) {
+    #' Rename a long read WGS sample
+    require(stringr)
+
+    x <- str_replace(x, "proe_Hopkins_", "R")
+    x <- str_replace(x, "pdrum_Hopkins_", "D")
+    x <- str_replace(x, "pcusp_Hopkins_", "C")
+    x <- str_replace(x, "ppil_Hopkins_", "P")
+    x <- str_replace(x, "ppilo_Hopkins_", "P")
+    x <- strsplit(x, "_")[[1]][1]
+    x <- strsplit(x, "-")[[1]][1]
+    x
+}
+
 ### Data loading
-LoadGFF <- function(fn){
-    LoadPackages(c("data.table", "stringr"))
-    if(str_ends(fn, "\\.gz")){
+LoadGFF <- function(fn) {
+    require(data.table)
+    require(stringr)
+
+    if (str_ends(fn, "\\.gz")) {
         use_cmd <- str_interp("gunzip -c ${fn} | grep -v -e '^#' -e '^$'")
     } else {
         use_cmd <- str_interp("grep -v -e '^#' -e '^$' ${fn}")
     }
-    out_d <- fread(cmd=use_cmd, header=FALSE, sep="\t", 
-                col.names=c("SEQID", "SRC", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTR"))
-    return(out_d)
+    out_d <- fread(cmd = use_cmd, header = FALSE, sep = "\t",
+                   col.names = c("SEQID", "SRC", "TYPE", "START", "END", "SCORE", "STRAND", "PHASE", "ATTR"))
+
+    out_d
 }
 
-LoadPCA <- function(in_prefix){
-    evec_d <- fread(str_interp("${in_prefix}.eigenvec"), header=FALSE, sep=" ")
+LoadPCA <- function(in_prefix) {
+    require(data.table)
+    require(stringr)
+
+    evec_d <- fread(str_interp("${in_prefix}.eigenvec"), header = FALSE, sep = " ")
     names(evec_d)[1:2] <- c("FID", "IID")
     names(evec_d)[-(1:2)] <- str_c("PC", 1:(ncol(evec_d) - 2))
 
-    eval_d <- fread(str_interp("${in_prefix}.eigenval"), header=FALSE)$V1
+    eval_d <- fread(str_interp("${in_prefix}.eigenval"), header = FALSE)$V1
     names(eval_d) <- names(evec_d)[-(1:2)]
     prop_var <- eval_d / unname(sum(eval_d))
 
-    return(list('evec'=evec_d, 'eval'=eval_d, 'prop_var'=prop_var))
+    list("evec" = evec_d, "eval" = eval_d, "prop_var" = prop_var)
 }
 
-LoadTexasBorder <- function(){
-    LoadPackages(c("rnaturalearth", "sf"))
+LoadTexasBorder <- function() {
+    require(rnaturalearth)
+    require(sf)
+
     # Load US states data
     us_states <- ne_states(country = "united states of america", returnclass = "sf")
 
     # Filter for Texas
-    texas <- us_states[us_states[["name"]] == "Texas",]
-        
+    texas <- us_states[us_states[["name"]] == "Texas", ]
+
     # Extract the coordinates
     texas_coords <- as.data.table(st_coordinates(texas))
 
     setnames(texas_coords, c("X", "Y"), c("LONG", "LAT"))
-    for(cn in str_c("L", 1:3)){
+    for (cn in str_c("L", 1:3)) {
         texas_coords[, eval(cn) := as.factor(get(cn))]
     }
-    return(texas_coords)
+
+    texas_coords
 }
 
 ### BED manipulation
-CountUniqueBases <- function(chrom, start_base, end_base, conda_env="popgen"){
-    LoadPackages(c("data.table", "stringr"))
-    tmpfn <- tempfile(fileext=".bed")
-    fwrite(data.table(chrom, start_base, end_base), file=tmpfn, quote=FALSE, sep="\t", col.names=FALSE, row.names=FALSE)
+CountUniqueBases <- function(chrom, start_base, end_base, conda_env = "popgen") {
+    require(data.table)
+    require(stringr)
+
+    tmpfn <- tempfile(fileext = ".bed")
+    fwrite(data.table(chrom, start_base, end_base), file = tmpfn, quote = FALSE, sep = "\t", col.names = FALSE, row.names = FALSE)
     use_cmd <- str_c("conda_setup=$('conda' 'shell.bash' 'hook' 2> /dev/null); eval \"$conda_setup\"; conda activate ", conda_env)
     use_cmd <- str_interp("${use_cmd}; sort -k 1,1 -k2,2n ${tmpfn} | bedtools merge -i - | awk '{sum += $3 - $2} END {print sum}'")
-    return(as.numeric(system(use_cmd, intern=TRUE)))
+    return(as.numeric(system(use_cmd, intern = TRUE)))
 }
 
 ### Computation
-# QuantileOverReplicates <- function(x, cntr=0.5, ci=c(0.025, 0.975)){
-#     q <- as.list(quantile(x, probs=c(ci[1], cntr, ci[2])))
+# QuantileOverReplicates <- function(x, cntr=0.5, ci=c(0.025, 0.975)) {
+#     q <- as.list(quantile(x, probs = c(ci[1], cntr, ci[2])))
 #     names(q) <- c("LWR", "MED", "UPR")
 #     return(q)
 # }
 
-QuantileOverReplicates <- function(..., prefixes="val", sep="_", probs=c(0.025, 0.5, 0.975), na.rm=TRUE){
+QuantileOverReplicates <- function(..., prefixes = "val", sep = "_",
+                                   probs = c(0.025, 0.5, 0.975), na.rm = TRUE) { # nolint: object_name_linter.
     in_arg <- list(...)
-    if(length(in_arg) != length(prefixes)){
+    if (length(in_arg) != length(prefixes)) {
         stop("Not enough prefixes for provided variables")
     }
 
     out_list <- list()
-    for(i in 1:length(in_arg)){
-        y <- as.list(quantile(in_arg[[i]], probs=probs, na.rm=na.rm))
+    for (i in seq_along(in_arg)) {
+        y <- as.list(quantile(in_arg[[i]], probs = probs, na.rm = na.rm))
         names(y) <- str_c(prefixes[i], sep, c("lwr", "med", "upr"))
         out_list <- c(out_list, y)
     }
@@ -134,7 +177,7 @@ QuantileOverReplicates <- function(..., prefixes="val", sep="_", probs=c(0.025, 
     return(out_list)
 }
 
-BootstrapWtAvg <- function(numer, denom, probs=c(0.025, 0.975), nboot=1000){
+BootstrapWtAvg <- function(numer, denom, probs = c(0.025, 0.975), nboot = 1000) {
     # Assumes numer and denom are e.g. measurements across windows.
     # Reports overall average as well as upper and lower percentiles
     # defined in probs
@@ -145,41 +188,47 @@ BootstrapWtAvg <- function(numer, denom, probs=c(0.025, 0.975), nboot=1000){
     denom <- denom[mask]
 
     n <- length(numer)
-    mat <- replicate(sample.int(n, size=n, replace=TRUE), n=nboot)
+    mat <- replicate(sample.int(n, size = n, replace = TRUE), n = nboot)
     boot_avg <- apply(mat, 2, function(x) sum(numer[x]) / sum(denom[x]))
     avg <- sum(numer) / sum(denom)
 
-    q <- unname(quantile(boot_avg, probs=probs))
-    return(list("MEAN"=avg, "LWR"=q[1], "UPR"=q[2]))
+    q <- unname(quantile(boot_avg, probs = probs))
+
+    list("MEAN" = avg, "LWR" = q[1], "UPR" = q[2])
 }
 
-RunOLS <- function(dat, xvar, yvar, npoints=100, level=0.95){
+RunOLS <- function(dat, xvar, yvar, npoints = 100, level = 0.95) {
+    require(data.table)
+    LWR <- UPR <- . <- NULL # for linter
+
     m <- lm(as.formula(paste(yvar, "~", xvar)), dat)
-    pval <- summary(m)$coef[2,4]
+    pval <- summary(m)$coef[2, 4]
     rsq <- summary(m)$r.squared
 
-    newdat <- dat[, .(X = seq(min(get(xvar)), max(get(xvar)), length.out=npoints))]
+    newdat <- dat[, .(X = seq(min(get(xvar)), max(get(xvar)), length.out = npoints))]
     setnames(newdat, "X", xvar)
-    
-    tmp <- predict(m, newdat, interval="confidence", level=level)
+
+    tmp <- predict(m, newdat, interval = "confidence", level = level)
     newdat[, eval(yvar) := tmp[, "fit"]]
     newdat[, LWR := tmp[, "lwr"]]
     newdat[, UPR := tmp[, "upr"]]
 
-    return(list(model=m, pval=pval, rsq=rsq, fitdat=newdat))
+    list(model = m, pval = pval, rsq = rsq, fitdat = newdat)
 }
 
-RunPoisson <- function(dat, xvar, yvar, npoints = 100, level = 0.95, 
+RunPoisson <- function(dat, xvar, yvar, npoints = 100, level = 0.95,
                        link = "log", ols_start = FALSE, no_intercept = FALSE) {
-    
+    require(data.table)
+    LWR <- UPR <- . <-  NULL # for linter
+
     fmla_str <- paste(yvar, "~", xvar)
-    if(no_intercept){
+    if (no_intercept) {
         fmla_str <- paste(fmla_str, " - 1")
     }
     fmla <- as.formula(fmla_str)
 
     # Run OLS to get starting values
-    if(ols_start){
+    if (ols_start) {
         ols <- lm(fmla, dat)
         start_vals <- coef(ols)
         start_vals[1] <- max(start_vals[1], .Machine$double.eps)
@@ -189,48 +238,50 @@ RunPoisson <- function(dat, xvar, yvar, npoints = 100, level = 0.95,
 
     # Fit Poisson GLM
     m <- glm(
-        fmla, 
-        data   = dat, 
+        fmla,
+        data   = dat,
         family = poisson(link = link),
         start  = start_vals
     )
-    
+
     # p-value
     pval <- summary(m)$coef[2, 4]
-    
+
     # Deviance-based pseudo R^2
     rsq <- 1 - m$deviance / m$null.deviance
-    
+
     newdat <- dat[, .(X = seq(min(get(xvar)), max(get(xvar)), length.out = npoints))]
     setnames(newdat, "X", xvar)
-    
+
     # Predictions on the link scale, then transform to response
     pr <- predict(m, newdata = newdat, type = "link", se.fit = TRUE)
     linkinv <- m$family$linkinv
-    
+
     z <- qnorm((1 + level) / 2)
     eta_fit <- pr$fit
     eta_lwr <- eta_fit - z * pr$se.fit
     eta_upr <- eta_fit + z * pr$se.fit
-    
+
     fit <- linkinv(eta_fit)
     lwr <- linkinv(eta_lwr)
     upr <- linkinv(eta_upr)
-    
+
     # Fitted values and CIs on the response scale
     newdat[, eval(yvar) := fit]
     newdat[, LWR := lwr]
     newdat[, UPR := upr]
-    
+
     return(list(model = m, pval = pval, rsq = rsq, fitdat = newdat))
 }
 
 RunNegBinom <- function(dat, xvar, yvar, npoints = 100, level = 0.95,
                         link = "log", ols_start = FALSE, no_intercept = FALSE) {
-    LoadPackages("MASS")
+    require(MASS)
+    require(data.table)
+    LWR <- UPR <- . <- NULL # for linter
 
     fmla_str <- paste(yvar, "~", xvar)
-    if(no_intercept){
+    if (no_intercept) {
         fmla_str <- paste(fmla_str, " - 1")
     }
     fmla <- as.formula(fmla_str)
@@ -245,21 +296,21 @@ RunNegBinom <- function(dat, xvar, yvar, npoints = 100, level = 0.95,
     }
 
     # Fit Negative Binomial GLM
-    if(link == "log"){
+    if (link == "log") {
         m <- MASS::glm.nb(
             formula = fmla,
             data    = dat,
             link    = "log",
             start   = start_vals
         )
-    } else if(link == "identity"){
+    } else if (link == "identity") {
         m <- MASS::glm.nb(
             formula = fmla,
             data    = dat,
             link    = "identity",
             start   = start_vals
         )
-    } else if(link == "sqrt"){
+    } else if (link == "sqrt") {
         m <- MASS::glm.nb(
             formula = fmla,
             data    = dat,
@@ -302,97 +353,106 @@ RunNegBinom <- function(dat, xvar, yvar, npoints = 100, level = 0.95,
 
 ### Plot stylings
 
-Load4SpPal <- function(pal="default"){
-    if(pal %in% c("default", "bluedrum")){
-        out_colors <- sort(c(roem="#FFCC00", pilo="#330066", drum="#7570B3", cusp="#339966"))
-    } else if(pal %in% c("alternate", "pinkdrum")){
-        out_colors <- sort(c(roem="#FFCC00", pilo="#330066", drum="#993366", cusp="#339966"))
-    } else if(pal %in% c("2drum")){
-        out_colors <- sort(c(roem="#FFCC00", pilo="#330066", drumBlue="#7570B3", drumPink="#993366", cusp="#339966"))
+Load4SpPal <- function(pal = "default") {
+    if (pal %in% c("default", "bluedrum")) {
+        out_colors <- sort(c(roem = "#FFCC00", pilo = "#330066", drum = "#7570B3", cusp = "#339966"))
+    } else if (pal %in% c("alternate", "pinkdrum")) {
+        out_colors <- sort(c(roem = "#FFCC00", pilo = "#330066", drum = "#993366", cusp = "#339966"))
+    } else if (pal %in% c("2drum")) {
+        out_colors <- sort(c(roem = "#FFCC00", pilo = "#330066", drumBlue = "#7570B3", drumPink = "#993366", cusp = "#339966"))
     } else {
         stop(str_interp("Palette name ${pal} not recognized"))
     }
     return(out_colors)
 }
 
-SetBaseTheme <- function(base_family, fontpath="fonts/", device="pdf"){
-    LoadPackages(c("extrafont", "ggplot2", "ggpubr"))
-    font_import(paths=fontpath, prompt=FALSE)
-    loadfonts(device=device)
+SetBaseTheme <- function(base_family, fontpath = "fonts/", device = "pdf") {
+    require(extrafont)
+    require(ggplot2)
+    require(ggpubr)
 
-    ggplot2::theme_set(theme_pubr(base_family=base_family))
+    font_import(paths = fontpath, prompt = FALSE)
+    loadfonts(device = device)
+
+    ggplot2::theme_set(theme_pubr(base_family = base_family))
 }
 
-GetPlotLimits <- function(p){
+GetPlotLimits <- function(p) {
     x <- layer_scales(p)$x$range$range
     y <- layer_scales(p)$y$range$range
-    return(rbind(x, y))
+    rbind(x, y)
 }
 
 ### Plotting helper functions
-AdmixAnc2Species <- function(plt_d){
+AdmixAnc2Species <- function(plt_d) {
     # Associate STRUCTURE or ADMIXTURE populations to species
-    LoadPackages("data.table")
-    pop_infer_totals <- plt_d[, sum(value), by=.(species, pop_infer)]
+    require(data.table)
+    V1 <- . <- NULL # for linter
+
+    value <- species <- pop_infer <- NULL # for linter
+
+    pop_infer_totals <- plt_d[, sum(value), by = .(species, pop_infer)]
     admix_pal <- c()
-    for(sp in c("roem", "cusp")){
+    for (sp in c("roem", "cusp")) {
         pop <- pop_infer_totals[species == sp][which.max(V1), pop_infer]
         admix_pal[pop] <- unname(Load4SpPal("default")[sp])
     }
-    
+
     remain_pops <- pop_infer_totals[, setdiff(unique(pop_infer), names(admix_pal))]
 
-    return(list("admix_pal"=admix_pal, "remain_pops"=remain_pops))
+    list("admix_pal" = admix_pal, "remain_pops" = remain_pops)
 }
 
-FloatAsSci <- function(x, dec_lwr=-2, dec_upr=2, dec_out=1){
+FloatAsSci <- function(x, dec_lwr = -2, dec_upr = 2, dec_out = 1) {
     # Returns a plotmath string for a value in scientific notation if
     # less than 'dec_lwr'  or greater than 'dec_upr' decimal places.
     # Use 'dec_out' places when outputting in scientific notation
-    LoadPackages("stringr")
+    require(stringr)
+
     y <- log10(x)
-    if(y >= dec_lwr && y <= dec_upr){
+    if (y >= dec_lwr && y <= dec_upr) {
         # Plain text
-        if(x >= 1){
-            patt <- str_c("$[", dec_out+1, ".f]{x}", sep="")
+        if (x >= 1) {
+            patt <- str_c("$[", dec_out + 1, ".f]{x}", sep = "")
             outstr <- str_interp(patt)
         } else {
-            patt <- str_c("$[0.", dec_out+1, "f]{x}", sep="")
+            patt <- str_c("$[0.", dec_out + 1, "f]{x}", sep = "")
             outstr <- str_interp(patt)
         }
     } else {
         # Scientific!
         pwr <- floor(y)
-        m <- x * 10^-pwr
-        patt <- str_c("$[0.", dec_out, "f]{m}", sep="")
+        m <- x * 10^-pwr # nolint: object_usage_linter.
+        patt <- str_c("$[0.", dec_out, "f]{m}", sep = "")
         outstr <- c(str_interp(patt), str_interp(" %*% 10^$[d]{pwr}"))
-        outstr <- str_c(outstr, collapse="")
+        outstr <- str_c(outstr, collapse = "")
     }
     return(outstr)
 }
 
-FormatR2PvalLab <- function(x, stacked=FALSE, pseudo=FALSE){
+FormatR2PvalLab <- function(x, stacked = FALSE, pseudo = FALSE) {
     # x should be an [1] rsq value and a [2] pvalue
-    LoadPackages("stringr")
-    if(pseudo){
+    require(stringr)
+
+    if (pseudo) {
         r_char <- '"Pseudo-" * italic(R)'
     } else {
         r_char <- "italic(R)"
     }
 
-    if(x[1] == 0){
+    if (x[1] == 0) {
         r2_str <- str_c(r_char, "^2==0")
     } else {
         r2_str <- str_c(r_char, "^2==", FloatAsSci(x[1]))
     }
 
-    if(x[2] == 0){
+    if (x[2] == 0) {
         pval_str <- str_c("italic(p) < ", FloatAsSci(.Machine$double.eps))
     } else {
-            str_c("italic(p)==", FloatAsSci(x[2]))
+        str_c("italic(p)==", FloatAsSci(x[2]))
     }
-    
-    if(stacked){
+
+    if (stacked) {
         out_str <- str_c("atop(", r2_str, ",", pval_str, ")")
     } else {
         out_str <- str_c(r2_str, "~~", pval_str)
@@ -401,37 +461,36 @@ FormatR2PvalLab <- function(x, stacked=FALSE, pseudo=FALSE){
 }
 
 hsv2rgb <- function(x, alpha = FALSE) {
-  if(any(is.na(x))) {
-    return(rep(NA,3)) 
-  } else {
-    return(grDevices::col2rgb(grDevices::hsv(x[1], x[2], 
-                             x[3]), alpha = alpha))
-  }
+    if (any(is.na(x))) {
+        return(rep(NA, 3))
+    } else {
+        return(grDevices::col2rgb(grDevices::hsv(x[1], x[2], x[3]), alpha = alpha))
+    }
 }
 
-BrightMatch <- function(x, y){
+BrightMatch <- function(x, y) {
     # Match brightness values
     x_hsv <- rgb2hsv(col2rgb(x))
     y_hsv <- rgb2hsv(col2rgb(y))
-    x_hsv["v",] <- y_hsv["v",]
+    x_hsv["v", ] <- y_hsv["v", ]
 
     tmp <- hsv2rgb(x_hsv) / 255
-    return(rgb(tmp[1], tmp[2], tmp[3]))
+
+    rgb(tmp[1], tmp[2], tmp[3])
 }
 
-# Metadata2PopulationMap <- function(met_d, min_dist=5){
+# Metadata2PopulationMap <- function(met_d, min_dist=5) {
 #     # Take metadata, identify population centers, and plot
 
-#     pop_d <- met_d[, .(lat=lat[1], long=long[1]), by=Population]
+#     pop_d <- met_d[, .(lat=lat[1], long=long[1]), by = Population]
 #     pop_dist <- as.data.table(t(combn(pop_d$Population, 2))) # Pairwise distances
 #     names(pop_dist) <- c("pop1", "pop2")
 
 #     pop_dist <- merge(pop_dist, pop_d, by.x="pop1", by.y="Population")
 #     setnames(pop_dist, c("lat", "long"), c("lat1", "long1"))
-    
+
 #     pop_dist <- merge(pop_dist, pop_d, by.x="pop2", by.y="Population")
 #     setnames(pop_dist, c("lat", "long"), c("lat2", "long2"))
-#     pop_dist[, DIST := haversine(c(lat1, long1), c(lat2, long2)), by=.(pop1, pop2)]
+#     pop_dist[, DIST := haversine(c(lat1, long1), c(lat2, long2)), by = .(pop1, pop2)]
 #     pop_dist[DIST < 1]
 # }
-
