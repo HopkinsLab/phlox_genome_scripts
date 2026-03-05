@@ -153,6 +153,117 @@ CountUniqueBases <- function(chrom, start_base, end_base, conda_env = "popgen") 
     return(as.numeric(system(use_cmd, intern = TRUE)))
 }
 
+### Tree and multiple alignment plotting
+ChromEndpoints <- function(chromsizes, gap_size) {
+    #' Get the endpoints of the chromosomes
+    SIDE <- NULL # for linter
+    chromsizes <- as.numeric(chromsizes)
+    gap_size <- as.numeric(gap_size)
+    x <- cbind(c(0, cumsum(chromsizes)[-length(chromsizes)]), cumsum(chromsizes))
+    x <- x + cbind(seq(0, gap_size * (length(chromsizes) - 1), by = gap_size),
+                   seq(0, gap_size * (length(chromsizes) - 1), by = gap_size))
+    out_list <- data.table(X = as.vector(t(x)),
+                           CHROM = as.vector(sapply(str_c("chr", seq_along(chromsizes)), function(x) c(x, x))))
+    out_list[, SIDE := rep(c("start", "end"), length(chromsizes))]
+    out_list
+}
+
+PlotChromosomes <- function(p, ref, width = 0.1, gap_size = 1,
+                            label_chrom = FALSE, label_color = "white",
+                            label_size = 3, ypos = NULL, ...) {
+    #' Plot the chromosome bodies
+    require(data.table)
+    require(ggplot2)
+    SIZE <- SPECIES <- CHROM <- GROUP <- X <- Y <- . <- NULL # for linter
+    plt_d <- ref[, ChromEndpoints(SIZE, gap_size), by = SPECIES]
+    plt_d <- plt_d[, .(X = c(X, rev(X))), by = .(SPECIES, CHROM)]
+
+    if (is.null(ypos)) {
+        plt_d[, Y := as.numeric(as.integer(SPECIES)) + c(-1, -1, 1, 1) * width / 2]
+    } else {
+        plt_d[, Y := ypos[SPECIES] + c(-1, -1, 1, 1) * width / 2]
+    }
+    plt_d[, GROUP := str_c(SPECIES, CHROM, sep = "_")]
+
+    p <- p + geom_polygon(aes(x = X, y = Y, group = GROUP, fill = SPECIES), data = plt_d, ...)
+
+    return(p)
+}
+
+LabelChromosomes <- function(p, ref, width = 0.1, gap_size = 1, ypos = NULL, ...) {
+    #' Label chromosomes with names
+    require(data.table)
+    X <- Y <- SIZE <- SPECIES <- CHROM <- . <- NULL
+    plt_d <- ref[, ChromEndpoints(SIZE, gap_size), by = SPECIES]
+    plt_d <- plt_d[, .(X = mean(X)), by = .(SPECIES, CHROM)]
+
+    if (is.null(ypos)) {
+        plt_d[, Y := as.numeric(as.integer(SPECIES))]
+    } else {
+        plt_d[, Y := ypos[SPECIES]]
+    }
+
+    p <- p + geom_text(aes(x = X, y = Y, label = CHROM), data = plt_d, ...)
+}
+
+BuildConnectorPolygons <- function(reg_dat, end_pos, width, connect_margin, ypos) {
+    #' Build curved "riparian" style connector polygons between synteny regions
+    require(data.table)
+
+    Rsp <- Rchrom <- Qsp <- Qchrom <- SPECIES <- sp_pair <- NULL # for linter
+    Rend <- Rstart  <- Qend <- Qstart <- orient <- NULL # for linter
+    idx_a <- reg_dat[, c(Rsp, Rchrom, "start")]
+    idx_b <- reg_dat[, c(Qsp, Qchrom, "start")]
+
+    x_offset_a <- end_pos[as.list(idx_a)]$X
+    x_offset_b <- end_pos[as.list(idx_b)]$X
+
+    if (is.null(ypos)) {
+        y_a <- end_pos[, which(levels(SPECIES) == reg_dat[["Rsp"]])]
+        y_b <- end_pos[, which(levels(SPECIES) == reg_dat[["Qsp"]])]
+    } else {
+        y_a <- end_pos[, ypos[reg_dat[["Rsp"]]]]
+        y_b <- end_pos[, ypos[reg_dat[["Qsp"]]]]
+    }
+
+    y_offset <- (width / 2) + connect_margin
+    if (y_a > y_b) {
+        y_offset <- -y_offset
+    }
+
+    out_dat <- calc_curvePolygon(
+        start1 = reg_dat[["Rstart"]] + x_offset_a,
+        end1   = reg_dat[["Rend"]] + x_offset_a,
+        start2 = reg_dat[["Qstart"]] + x_offset_b,
+        end2   = reg_dat[["Qend"]] + x_offset_b,
+        y1     = y_a + y_offset,
+        y2     = y_b - y_offset
+    )
+    out_dat <- as.data.table(out_dat)
+    setnames(out_dat, names(out_dat), toupper(names(out_dat)))
+
+    ori <- ifelse(reg_dat[, sign(Rend - Rstart) != sign(Qend - Qstart)], "-", "+")
+    out_dat[, sp_pair := reg_dat[["sp_pair"]]]
+    out_dat[, orient := ori]
+
+    out_dat
+}
+
+
+PlotConnections <- function(p, dat, ref, width = 0.1, gap_size = 1, connect_margin = 0.01, ypos = NULL, ...) {
+    #' Plot riparian style connections
+    require(data.table)
+
+    SIZE <- SPECIES <- CHROM <- SIDE <- INDEX <- X <- Y <- orient <- NULL
+    end_pos <- ref[, ChromEndpoints(SIZE, gap_size), by = SPECIES]
+    setkey(end_pos, SPECIES, CHROM, SIDE)
+    plt_d <- dat[, BuildConnectorPolygons(.SD, end_pos, width, connect_margin, ypos), by = INDEX]
+
+    p <- p + geom_polygon(aes(x = X, y = Y, group = INDEX, fill = orient), data = plt_d, ...)
+    return(p)
+}
+
+
 ### Computation
 # QuantileOverReplicates <- function(x, cntr=0.5, ci=c(0.025, 0.975)) {
 #     q <- as.list(quantile(x, probs = c(ci[1], cntr, ci[2])))

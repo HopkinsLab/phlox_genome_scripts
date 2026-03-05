@@ -23,12 +23,16 @@ req_pkgs <- c(
     "circlize",
     "shades",
     "ggpubr",
+    "ggtree",
     "ComplexHeatmap",
     "pheatmap",
     "RColorBrewer",
     "patchwork",
     "ggrepel",
     "gridExtra",
+    "GENESPACE",
+    "intervals",
+    "ape",
     "cowplot",
     "rnaturalearth",
     "sf",
@@ -37,7 +41,9 @@ req_pkgs <- c(
     "png",
     "grid"
 )
+
 LoadPackages(req_pkgs)
+LoadAsyntLib()
 
 SetBaseTheme(base_family = "Arial", fontpath = "../utils/fonts")
 par(family = "Arial")
@@ -211,10 +217,12 @@ plots downstream with patchwork.
 ### Circos function
 ```{r circPlotFuncs, warnings = FALSE, messages = FALSE}
 FourColorFunc <- function() {
+    require(grDevices)
     rev(c(colorRampPalette(c("#FFFFFF", Load4SpPal("2drum")["drumPink"], "#000000"))(14)[c(2, 6, 10)], "#BBBBBB"))
 }
 
 FiveColorFunc <- function() {
+    require(grDevices)
     rev(c(colorRampPalette(c("#FFFFFF", Load4SpPal("2drum")["drumPink"], "#000000"))(14)[c(2, 5, 8, 11)], "#B8B8B8"))
 }
 
@@ -439,6 +447,143 @@ CircosPlot()
 dev.off()
 ```
 
+# Tree and multiple alignment figures
+
+## Plotting parameters
+```{r treePlotParams}
+sp_order <- c("proe", "pdrum", "pcusp", "ppilo")
+sp_pairs <- c("pdrum_vs_pcusp", "pdrum_vs_proe")
+
+sp_colors <- Load4SpPal()
+names(sp_colors) <- ConvertSpeciesNames(names(sp_colors), "short", "ont")
+
+fill_col <- sp_colors
+fill_col <- c(fill_col, "+" = "#7F7F7F", "-" = "#C92C4C")
+
+# Tree specific params
+clade_offset <- 0.004
+barsize <- 1
+
+# Multi-align specific params
+gap_size <- 40
+width <- 0.8
+connect_margin <- 0.05
+```
+
+## Load data
+
+### Tree data
+```{r loadTreeData}
+phy_path <- "tree_data/consensus_tree.rep_median.nwk"
+phy <- read.tree(phy_path)
+
+# Tip indices by species
+tip_i <- list()
+for (sp in sp_order) {
+    tip_i[[sp]] <- which(str_starts(phy$tip.label, substr(sp, 1, 4)))
+}
+node_dp <- node.depth.edgelength(phy)
+```
+
+### Alignment data
+```{r loadAlignmentData}
+align_dat <- list()
+for (pair in sp_pairs) {
+    fn <- str_interp("tree_data/${pair}_alignment.corrected.paf")
+    gz_fn <- str_interp("${fn}.gz")
+    if (file.exists(gz_fn) && !file.exists(fn)) {
+        system(str_interp("gunzip -c ${gz_fn} > ${fn}"))
+    }
+    align_dat[[pair]] <- as.data.table(import.paf(fn))
+    align_dat[[pair]][, sp_pair := pair]
+}
+align_dat <- rbindlist(align_dat)
+align_dat[, c("Rsp", "Rchrom") := tstrsplit(reference, "#")]
+align_dat[, c("Qsp", "Qchrom") := tstrsplit(query, "#")]
+
+# Keep only chrom to chrom alignments
+align_dat <- align_dat[str_starts(Rchrom, "^chr") & str_starts(Qchrom, "^chr")]
+align_dat[, Rchrom := str_remove(str_remove(Rchrom, "_RagTag"), "lg")]
+align_dat[, Qchrom := str_remove(str_remove(Qchrom, "_RagTag"), "lg")]
+
+align_dat[, Rstart := Rstart / 1e6]
+align_dat[, Qstart := Qstart / 1e6]
+align_dat[, Rend := Rend / 1e6]
+align_dat[, Qend := Qend / 1e6]
+
+align_dat[, INDEX := seq_len(.N)]
+```
+
+### Chrom size data
+```{r loadChromSizes}
+chrom_sizes <- list()
+for (sp in sp_order) {
+    chrom_sizes[[sp]] <- fread(str_interp("tree_data/${sp}.chrom_sizes.tsv"),
+                       header = FALSE, col.names = c("CHROM", "SIZE"))
+    chrom_sizes[[sp]][, SPECIES := sp]
+}
+chrom_sizes <- rbindlist(chrom_sizes)
+chrom_sizes[, CHROM := str_remove(str_remove(CHROM, "_RagTag"), "lg")]
+chrom_sizes[, SPECIES := factor(SPECIES, levels = sp_order)]
+chrom_sizes[, SIZE := SIZE / 1e6]
+setorder(chrom_sizes, SPECIES, CHROM)
+```
+
+## Plot
+```{r prepPlot}
+samp_order <- c()
+for (sp in sp_order) {
+    samp_order <- c(samp_order, phy$tip.label[str_starts(phy$tip.label, substr(sp, 1, 4))])
+}
+plt_phy <- rotateConstr(phy, samp_order)
+plt_phy$tip.label <- unname(sapply(plt_phy$tip.label, RenameWGS))
+
+ypos <- c()
+for (sp in sp_order) {
+    ypos[sp] <- median(which(str_starts(samp_order, substr(sp, 1, 4))))
+}
+```
+
+### Tree / Phylogeny
+```{r plotTree}
+p1 <- ggtree(plt_phy, ladderize = FALSE) + geom_tiplab(align = FALSE) +
+    scale_x_continuous(expand = expansion(c(0, 0.26))) +
+    geom_cladelabel(node = 21, label = "", color = sp_colors["pcusp"], barsize = barsize, align = TRUE, offset = clade_offset) +
+    geom_cladelabel(node = 16, label = "", color = sp_colors["pdrum"], barsize = barsize, align = TRUE, offset = clade_offset) +
+    geom_cladelabel(node = 19, label = "", color = sp_colors["proe"],  barsize = barsize, align = TRUE, offset = clade_offset) +
+    theme_tree2(legend.position = "none") +
+    theme(axis.text.x = element_text(size = 11)) +
+    coord_cartesian(xlim = c(0, 0.025), ylim = c(0, 13), expand = FALSE)
+plist[["tree"]] <- p1
+print(p1)
+```
+
+### Multiple alignment
+```{r plotMultiAlign}
+p2 <- ggplot()
+p2 <- PlotChromosomes(p2, chrom_sizes, width = width, gap_size = gap_size, color = "black", ypos = ypos)
+p2 <- LabelChromosomes(p2, chrom_sizes, width = width, gap_size = gap_size, color = "white", size = 2, ypos = ypos)
+p2 <- PlotConnections(p2, align_dat, chrom_sizes, width = width, gap_size = gap_size, connect_margin = connect_margin, alpha = 0.5, ypos = ypos)
+p2 <- p2 + scale_fill_manual(values = fill_col) +
+    scale_y_continuous(expand = expansion(c(0.17, 0.18))) +
+    coord_cartesian(ylim = c(0, 13), expand = FALSE) +
+    guides(fill = "none") +
+    theme_pubr() +
+    theme(title = element_blank(),
+          axis.title = element_blank(),
+          axis.text = element_blank(),
+          axis.line = element_blank(),
+          axis.ticks = element_blank())
+plist[["multi"]] <- p2
+print(p2)
+```
+
+### Altogether
+```{r plotTreeMultiCombo, fig.width = 12, fig.height = 4}
+p <- p1 + p2 + plot_layout(widths = c(0.5, 1.5))
+print(p)
+```
+
 # TE and SV figures
 
 ## Load data
@@ -528,7 +673,7 @@ ryb_pal <- colorRampPalette(rev(brewer.pal(n = 11, name = "RdYlBu")))
 
 ### Repeats only
 
-```{r plotRawPie, fig.width = 4, fig.height = 4}
+```{r plotRawPie, fig.width = 3, fig.height = 3}
 plt_d <- PrepRptPlotData()
 
 nr <- nrow(plt_d)
