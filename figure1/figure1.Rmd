@@ -247,6 +247,9 @@ CircosPlot <- function() {
     require(ComplexHeatmap)
     require(grid)
 
+    INDEX <- CHROM <- . <- NULL # for linter
+    SIZE <- START <- PROP_BP <- FEATURE <- NULL # nolint: object_name_linter.
+
     #########################
     # [ Init ]
     tr_h <- 0.1 # A "unit" of track height to work off of
@@ -293,7 +296,7 @@ CircosPlot <- function() {
         track.height = tr_h * 2,
         panel.fun = function(x, y) {
             circos.text(CELL_META$xcenter,
-                        CELL_META$cell.ylim[2] + mm_y(3.7),
+                        CELL_META$cell.ylim[2] + mm_y(7),
                         CELL_META$sector.index)
             circos.axis(labels.cex = 1.0)
         }
@@ -325,7 +328,7 @@ CircosPlot <- function() {
     MakeYticks <- function(y_max, ndiv = 2) {
         # Assumes min Y is 0, Y >= 0.01
         ystep <- floor(y_max * 100 / ndiv) / 100
-        return(seq(0, ystep * ndiv, by = ystep))
+        seq(0, ystep * ndiv, by = ystep)
     }
 
     for (sp in names(track_nums)) {
@@ -402,28 +405,42 @@ CircosPlot <- function() {
     }
 }
 
-CircosLegend <- function() {
-    lgd <- list()
 
-    ## Build up legend
-    lgd[["feat"]] <- Legend(at = names(tr1_colors), type = "grid",
-                            legend_gp = gpar(fill = unname(tr1_colors)), title_position = "topleft",
-                            title = "Feature occupancy")
+CircosLegend <- function(kind = "feat",
+                         direction = "vertical",
+                         position = "left") {
+    require(ggpubr)
+    require(ggplot2)
+    if (kind == "feat") {
+        fake_dat <- data.frame(x = names(tr1_colors), y = seq_along(tr1_colors))
+        p <- ggbarplot(fake_dat, x = "x", y = "y", fill = "x", color = NA) +
+            scale_fill_manual(values = tr1_colors) +
+            guides(fill = guide_legend(title = "Feature occupancy",
+                                       direction = direction,
+                                       position = position))
+    } else if (kind == "svs") {
+        fake_dat <- data.frame(x = as.character(0:1), y = 0:1)
+        p <- ggbarplot(fake_dat, x = "x", y = "y", fill = "y") +
+            scale_fill_gradient(name = "Normalized\nSV density",
+                                low = "#FFFFFF",
+                                high = target_dark) +
+            guides(fill = guide_colorbar(direction = direction,
+                                         position = position))
+    } else if (kind == "pi_fst") {
+        use_col <- Load4SpPal()[names(track_nums)]
+        names(use_col) <- c("Nt diversity (P. drum)", "Fst (P. roem vs. P. drum)", "Fst (P. cusp vs. P. drum)")
+        fake_dat <- data.frame(x = as.character(rep(seq_along(use_col), 2)),
+                               y = rep(seq_along(use_col), 2),
+                               grp = factor(rep(names(use_col), 2), levels = names(use_col)))
+        p <- ggpubr::ggline(fake_dat, x = "x", y = "y", color = "grp", plot_type = "l") +
+            scale_color_manual(values = use_col) +
+            guides(color = guide_legend(title = "Genetic variation",
+                                        direction = direction,
+                                        position = position))
+    }
 
-    col_ramp <- colorRamp2(0:1, colors = c("#FFFFFF", target_dark))
-    lgd[["svs"]] <- Legend(at = seq(0, 1, by = 0.25), col_fun = col_ramp,
-                           title_position = "topleft", title = "Normalized SV density")
-
-    lgd[["pi_fst"]] <- Legend(at = c("Nt diversity (P. drum)", "Fst (P. roem vs. P. drum)", "Fst (P. cusp vs. P. drum)"),
-                              type = "lines", legend_gp = gpar(col = Load4SpPal()[names(track_nums)]),
-                              title_position = "topleft",
-                              title = "Genetic variation")
-
-    # Finalize and draw
-    # lgd_out <- packLegend(list = lgd, direction = "horizontal")
-    lgd_out <- packLegend(list = lgd, direction = "horizontal", max_width = unit(80, "mm"))
-    draw(lgd_out, x = unit(4, "mm"), y = unit(4, "mm"), just = c("left", "bottom"))
-    # [ Resulting dimensions are 3.5"W vs 2"H]
+    leg <- ggpubr::as_ggplot(ggpubr::get_legend(p))
+    leg
 }
 ```
 
@@ -519,7 +536,7 @@ align_dat[, INDEX := seq_len(.N)]
 chrom_sizes <- list()
 for (sp in sp_order) {
     chrom_sizes[[sp]] <- fread(str_interp("tree_data/${sp}.chrom_sizes.tsv"),
-                       header = FALSE, col.names = c("CHROM", "SIZE"))
+                               header = FALSE, col.names = c("CHROM", "SIZE"))
     chrom_sizes[[sp]][, SPECIES := sp]
 }
 chrom_sizes <- rbindlist(chrom_sizes)
@@ -613,6 +630,7 @@ PrepRptPlotData <- function(
     combine_ltr = TRUE,
     ignore_low_occup_n = 4
 ) {
+    repFamily <- . <- NULL # for linter # nolint: object_name_linter.
     if (!(u %in% c("indRepBP", "indRepCount"))) {
         stop(str_interp("Unit ${u} not recognized"))
     }
@@ -908,8 +926,8 @@ p <- ggplot(plt_d[SPECIES != "P. pilosa"]) +
     ylab("Repeat family") +
     theme_bw() +
     guides(fill = guide_colorbar(title = "Sequence occupancy\nrelative to pilosa",
-                                 direction = "horizontal")) +
-    theme(legend.position = "top", panel.grid.major.y = element_blank(),
+                                 direction = "vertical")) +
+    theme(legend.position = "right", panel.grid.major.y = element_blank(),
           strip.text = element_text(face = "italic"))
 print(p)
 
@@ -1032,7 +1050,10 @@ mapannual <- ggplot(data = world) +
                            style = north_arrow_orienteering) +
     coord_sf(xlim = c(-101.5, -95.5), ylim = c(32.5, 27.5)) +
     annotation_custom(g_hab, xmin = -101.3619, xmax = -94.98436, ymin = 28.24768, ymax = 32.60038) +
-    theme_bw(base_size = 22)
+    theme_bw(base_size = 18) +
+    guides(shape = guide_legend(position = "inside", direction = "vertical"),
+           color = guide_legend(position = "inside", direction = "vertical")) +
+    theme(legend.position.inside = c(0.9, 0.9))
 
 print(mapannual)
 plist[["map"]] <- mapannual
@@ -1203,6 +1224,33 @@ p <- ggplot(plt_d, aes(x = FEATURE, y = PI_med)) +
 
 print(p)
 print(plt_d)
+```
+
+# Final Figure 1 plot
+```{r plotEverything, fig.width=13, fig.height=14}
+areas <- c(
+    patchwork::area(t =  1, l =  1, b = 13, r = 13),
+    patchwork::area(t = 11, l =  1, b = 12, r =  2), # circos legends
+    patchwork::area(t = 13, l =  1, b = 13, r =  2), # circos legends
+    patchwork::area(t = 13, l =  3, b = 13, r =  4), # circos legends
+    patchwork::area(t =  2, l = 13, b =  7, r = 18),
+    patchwork::area(t =  2, l = 19, b =  7, r = 24),
+    patchwork::area(t =  8, l = 13, b = 10, r = 15),
+    patchwork::area(t =  8, l = 16, b = 10, r = 24),
+    patchwork::area(t = 11, l = 13, b = 13, r = 24)
+)
+
+p <- wrap_elements(full = ~ CircosPlot()) +
+    CircosLegend("feat") +
+    CircosLegend("svs") +
+    CircosLegend("pi_fst") +
+    plist$pie + plist$map +
+    plist$tree + plist$multi +
+    plist$rpt_fam +
+    plot_layout(design = areas)
+
+print(p)
+ggsave(p, file = "figure1.pdf", width = 25, height = 13)
 ```
 
 # Save for debugging
