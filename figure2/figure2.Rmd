@@ -12,22 +12,31 @@ author: Felix L. Wu
 
 ## Load packages
 
-```{r loadPkg, message=FALSE}
+```{r loadPkg, message = FALSE}
 source("utils/genome_plots.R")
 
 # Install packages
-req_pkgs <- c("data.table", "stringr", "pracma", "ggpubr", "ggnewscale", "viridis", "patchwork", "extrafont", "digest", "poppr")
+req_pkgs <- c("data.table",
+              "stringr",
+              "pracma",
+              "ggpubr",
+              "ggnewscale",
+              "viridis",
+              "patchwork",
+              "extrafont",
+              "digest",
+              "poppr")
 LoadPackages(req_pkgs)
 LoadEEMSplotLib()
 ```
 
 ## Theme/font stylings
-```{r themeSet, message=FALSE}
-SetBaseTheme(base_family="Arial")
+```{r themeSet, message = FALSE}
+SetBaseTheme(base_family = "Arial")
 plist <- list()
 # pc1_color_range <- c("#524C98", "#D1A4BB")
 pc1_color_range <- c("#352E80", "#D699B7", "#FFDEEE")
-eems_colors <- c("#994000", "#CC5800", "#FF8F33", "#FFAD66", "#FFCA99", "#FFE6CC", 
+eems_colors <- c("#994000", "#CC5800", "#FF8F33", "#FFAD66", "#FFCA99", "#FFE6CC",
                  "#DAE9FD", "#B5D3FB", "#90BDF9", "#6BA7F7", "#4691F4", "#217CF3")
 
 # > dichromat::dichromat(colorRampPalette(pc1_color_range)(10))
@@ -49,32 +58,35 @@ tmp_pdf <- "pdfs/tmp.pdf"
 ## Metadata
 ```{r loadMet}
 met_fn <- "metadata.corrected.tsv"
-met_d <- fread(met_fn, header=TRUE, sep="\t", na.strings=c("NA", "#N/A"))
+met_d <- fread(met_fn, header = TRUE, sep = "\t", na.strings = c("NA", "#N/A"))
 ```
 
 Figure out which cusp population is closest to each drum population
 
-```{r drumCuspDist, fig.width=4, fig.height=3}
+```{r drumCuspDist, fig.width = 4, fig.height = 3}
 drum_pops <- met_d[species == "drum", unique(Population)]
-tmp <- met_d[, .(lat=lat[1], long=long[1], species=species[1]), by=Population]
+tmp <- met_d[, .(lat = lat[1], long = long[1], species = species[1]), by = Population]
 cusp_pops <- tmp[species == "cusp", Population]
 setkey(tmp, Population)
 
 nearest_cusp <- list()
-for(i in drum_pops){
+for (i in drum_pops) {
     min_dist <- Inf
     drum_coords <- tmp[i, c(lat, long)]
-    j <- tmp[cusp_pops, haversine(drum_coords, c(lat, long)), by=Population][, Population[which.min(V1)]]
-    nearest_cusp[[i]] <- data.table(DRUM_POP=i, CUSP_POP=j, DIST=haversine(drum_coords, tmp[j, c(lat, long)]))
+    j <- tmp[cusp_pops, haversine(drum_coords, c(lat, long)), by = Population][, Population[which.min(V1)]]
+    nearest_cusp[[i]] <- data.table(DRUM_POP = i,
+                                    CUSP_POP = j,
+                                    DIST = haversine(drum_coords, tmp[j, c(lat, long)]))
 }
-nearest_cusp <- rbindlist(nearest_cusp); rm(tmp)
+nearest_cusp <- rbindlist(nearest_cusp)
+rm(tmp)
 
 symp_dist_cutoff <- 30
 
-p <- ggplot(nearest_cusp, aes(DIST)) + 
-    stat_ecdf(geom="step") + 
-    geom_vline(xintercept=symp_dist_cutoff, color="red") +
-    xlab("Drum pop distance to nearest cusp") + 
+p <- ggplot(nearest_cusp, aes(DIST)) +
+    stat_ecdf(geom = "step") +
+    geom_vline(xintercept = symp_dist_cutoff, color = "red") +
+    xlab("Drum pop distance to nearest cusp") +
     theme_pubr()
 print(p)
 
@@ -83,9 +95,9 @@ symp_drum <- nearest_cusp[DIST < symp_dist_cutoff, DRUM_POP]
 
 ## Function for getting a results directory from parameter settings
 ```{r resDir}
-ResDirFromParams <- function(breadth, species, min_samp, mind){
-    x <- str_interp("results/${breadth}/${species}/res_stacks/min_samples_per_pop~${min_samp}/min_samples_overall~${min_samp}/mind_${mind}")
-    return(x)
+ResDirFromParams <- function(breadth, species, min_samp, mind) {
+    require(stringr)
+    str_interp("results/${breadth}/${species}/res_stacks/min_samples_per_pop~${min_samp}/min_samples_overall~${min_samp}/mind_${mind}")
 }
 ```
 
@@ -99,11 +111,11 @@ Both 3-species (all annuals) PCA and drummondii-only PCA.
 
 ```{r prepPCA}
 pca_info <- list()
-for(nm in c("three", "drum")){
-    if(nm == "three"){
-        res_dir <- ResDirFromParams("multi", "cusp_drum_roem", min_samp=0.7, mind=0.25)
+for (nm in c("three", "drum")) {
+    if (nm == "three") {
+        res_dir <- ResDirFromParams("multi", "cusp_drum_roem", min_samp = 0.7, mind = 0.25)
     } else {
-        res_dir <- ResDirFromParams("single", "drum", min_samp=0.5, mind=0.5)
+        res_dir <- ResDirFromParams("single", "drum", min_samp = 0.5, mind = 0.5)
     }
     pca_prefix <- str_interp("${res_dir}/pca_impute/populations.snps.lFilt.iFilt.pca.impute.missForest")
     pca_info[[nm]] <- LoadPCA(pca_prefix)
@@ -111,37 +123,38 @@ for(nm in c("three", "drum")){
 ```
 
 ## Plot
-```{r plotPCA, fig.width=4.5, fig.height=4.5}
+```{r plotPCA, fig.width = 4.5, fig.height = 4.5}
 plist[["pca"]] <- list()
-for(nm in names(pca_info)){
-    plt_d <- merge(pca_info[[nm]]$evec, met_d, by.x="IID", by.y="Sample_ID")
+for (nm in names(pca_info)) {
+    plt_d <- merge(pca_info[[nm]]$evec, met_d, by.x = "IID", by.y = "Sample_ID")
 
     xyvar <- c("PC1", "PC2")
 
     axis_labs <- c()
-    for(i in seq_along(xyvar)){
+    for (i in seq_along(xyvar)) {
         pct <- pca_info[[nm]]$prop_var[xyvar[i]] * 100
         axis_labs[i] <- str_interp("${xyvar[i]} ($[0.1f]{pct}%)")
     }
 
-    if(nm == "three"){
+    if (nm == "three") {
         cvar <- "species"
-        plt_d[, species := factor(ConvertSpeciesNames(species), levels=ConvertSpeciesNames(c("roem", "drum", "cusp")))]
+        plt_d[, species := factor(ConvertSpeciesNames(species), levels = ConvertSpeciesNames(c("roem", "drum", "cusp")))]
     } else {
         cvar <- "PC1"
     }
 
-    p <- ggscatter(plt_d, x=xyvar[1], y=xyvar[2], color=cvar, alpha=ifelse(nm=="three", 0.5, 0.75)) + 
+    p <- ggscatter(plt_d, x = xyvar[1], y = xyvar[2], color = cvar, alpha = ifelse(nm == "three", 0.5, 0.75)) +
         xlab(axis_labs[1]) + ylab(axis_labs[2])
-    if(nm == "three"){    
+    if (nm == "three") {
         use_col <- Load4SpPal()
         names(use_col) <- ConvertSpeciesNames(names(use_col))
-        p <- p + scale_color_manual(values=use_col)
+        p <- p + scale_color_manual(values = use_col)
     } else {
         p <- p + scale_color_gradient2(
-                low=pc1_color_range[1], 
-                mid=pc1_color_range[2], 
-                high=pc1_color_range[3])
+            low = pc1_color_range[1],
+            mid = pc1_color_range[2],
+            high = pc1_color_range[3]
+        )
     }
 
     plist[["pca"]][[nm]] <- p
@@ -154,42 +167,42 @@ for(nm in names(pca_info)){
 
 ## Load data
 ```{r prepAdmix}
-res_dir <- ResDirFromParams("multi", "cusp_drum_roem", min_samp=0.5, mind=0.5)
+res_dir <- ResDirFromParams("multi", "cusp_drum_roem", min_samp = 0.5, mind = 0.5)
 admix_info <- list()
 admix_info[["cv"]] <- fread(
-    str_interp("${res_dir}/admix/populations.snps.lFilt.iFilt.admix.CV_report.txt"), 
-    sep=":", 
-    header=FALSE, 
-    col.names=c("K", "CV_error")
+    str_interp("${res_dir}/admix/populations.snps.lFilt.iFilt.admix.CV_report.txt"),
+    sep = ":",
+    header = FALSE,
+    col.names = c("K", "CV_error")
 )
 admix_info[["cv"]][, K := as.integer(str_replace(str_replace(K, "CV error \\(K=", ""), "\\)", ""))]
 
-samps <- fread(str_interp("${res_dir}/admix/populations.snps.lFilt.iFilt.admix.fam"), header=FALSE)$V2
-samp_ord <- met_d[Sample_ID %in% samps, 
-    .(  Sample_ID, 
-        species=factor(species, levels=c("roem", "drum", "cusp")), 
-        long)]
+samps <- fread(str_interp("${res_dir}/admix/populations.snps.lFilt.iFilt.admix.fam"), header = FALSE)$V2
+samp_ord <- met_d[Sample_ID %in% samps,
+                  .(Sample_ID,
+                    species = factor(species, levels = c("roem", "drum", "cusp")),
+                    long)]
 setorder(samp_ord, species, long)
 admix_info[["ord"]] <- samp_ord
 
-for(k in 1:8){
+for (k in 1:8) {
     nm <- as.character(k)
     tmp <- fread(
-        str_interp("${res_dir}/admix/populations.snps.lFilt.iFilt.admix.${k}.Q"), 
-        header=FALSE
+        str_interp("${res_dir}/admix/populations.snps.lFilt.iFilt.admix.${k}.Q"),
+        header = FALSE
     )
     tmp[, IID := samps]
 
-    tmp <- melt(tmp, id.vars="IID", variable.name="pop_infer")
+    tmp <- melt(tmp, id.vars = "IID", variable.name = "pop_infer")
     tmp[, pop_infer := str_replace(pop_infer, "V", "p")]
     tmp <- merge(
-        tmp, 
-        met_d[, .(Sample_ID, species, Population, lat, long)], 
-        by.x="IID", 
-        by.y="Sample_ID"
+        tmp,
+        met_d[, .(Sample_ID, species, Population, lat, long)],
+        by.x = "IID",
+        by.y = "Sample_ID"
     )
-    
-    tmp[, IID := factor(IID, levels=samp_ord$Sample_ID)]
+
+    tmp[, IID := factor(IID, levels = samp_ord$Sample_ID)]
 
     admix_info[[nm]] <- tmp
 }
@@ -201,17 +214,17 @@ admix_info[["plot_k"]] <- "3"
 
 CV error for different k values
 
-```{r plotAdmixError, fig.width=4, fig.height=3}
+```{r plotAdmixError, fig.width = 4, fig.height = 3}
 plt_d <- admix_info[["cv"]]
-p <- ggplot(plt_d, aes(x=K, y=CV_error)) + 
-    geom_point(color="dodgerblue") + geom_line(color="dodgerblue") +
+p <- ggplot(plt_d, aes(x = K, y = CV_error)) +
+    geom_point(color = "dodgerblue") + geom_line(color = "dodgerblue") +
     theme_pubr()
 print(p)
 ```
 
 Actual admixture plot
 
-```{r plotAdmix, fig.width=8, fig.height=2}
+```{r plotAdmix, fig.width = 8, fig.height = 2}
 k <- admix_info[["plot_k"]]
 plt_d <- admix_info[[k]]
 
@@ -219,37 +232,37 @@ plt_d <- admix_info[[k]]
 tmp <- dcast(admix_info[["3"]][, .(IID, pop_infer, value)], IID ~ pop_infer)
 anc_co <- 0.9
 admix_samps <- tmp[((p1 > anc_co) + (p2 > anc_co) + (p3 > anc_co)) != 1, IID]
-admix_annot <- plt_d[IID %in% admix_samps, .(X=as.integer(IID), Y = cumsum(rev(value))[which.min(abs(cumsum(rev(value)) - 0.5))]), by=IID]
+admix_annot <- plt_d[IID %in% admix_samps, .(x = as.integer(IID), Y = cumsum(rev(value))[which.min(abs(cumsum(rev(value)) - 0.5))]), by = IID]
 
 
 x_annot <- which(!duplicated(admix_info[["ord"]]$species))[-1] - 0.5
-x_midpts <- (c(1, x_annot+0.5) + c(x_annot+0.5, length(levels(plt_d$IID)))) / 2
+x_midpts <- (c(1, x_annot + 0.5) + c(x_annot + 0.5, length(levels(plt_d$IID)))) / 2
 
 # Associate ancestry with species
-if(as.integer(k) == 4){
+if (as.integer(k) == 4) {
     tmp <- AdmixAnc2Species(plt_d)
-    if(length(tmp$remain_pops) != 2){
-        stop("Failed to find a four-color palette for k=4")    
+    if (length(tmp$remain_pops) != 2) {
+        stop("Failed to find a four-color palette for k=4")
     }
     admix_pal <- tmp$admix_pal
     admix_pal[tmp$remain_pops[1]] <- unname(Load4SpPal("2drum")["drumBlue"])
     admix_pal[tmp$remain_pops[2]] <- unname(Load4SpPal("2drum")["drumPink"])
-} else if(as.integer(k) == 3) {
+} else if (as.integer(k) == 3) {
     tmp <- AdmixAnc2Species(plt_d)
-    if(length(tmp$remain_pops) != 1){
+    if (length(tmp$remain_pops) != 1) {
         stop("Failed to find a three-color palette for k=4")
     }
     admix_pal <- tmp$admix_pal
     admix_pal[tmp$remain_pops] <- unname(Load4SpPal()["drum"])
 } else {
-    admix_pal <- get_palette("d3", k=as.integer(k))
+    admix_pal <- get_palette("d3", k = as.integer(k))
     names(admix_pal) <- str_c("p", 1:as.integer(k))
 }
 
-p <- ggplot(plt_d, aes(x=IID, y=value, fill=pop_infer)) + 
-    geom_bar(stat="identity", width=1) +
-    geom_hline(yintercept=0, color="black") +
-    scale_fill_manual(values=admix_pal) +
+p <- ggplot(plt_d, aes(x = IID, y = value, fill = pop_infer)) +
+    geom_bar(stat = "identity", width = 1) +
+    geom_hline(yintercept = 0, color = "black") +
+    scale_fill_manual(values = admix_pal) +
     ylab("Proportion inferred ancestry") +
     ggtitle(str_interp("k = ${k}")) +
     theme_pubr() +
@@ -258,24 +271,24 @@ p <- ggplot(plt_d, aes(x=IID, y=value, fill=pop_infer)) +
         axis.title.x = element_blank(),
         axis.text.x = element_blank(),
         axis.ticks.x = element_blank(),
-        axis.title.y = element_text(size=9),
-        legend.title = element_text(size=9),
+        axis.title.y = element_text(size = 9),
+        legend.title = element_text(size = 9),
         legend.position = "right"
     )
-for(x in x_annot){
-    p <- p + annotate("path", x=rep(x, 2), y=c(0, 0.05), color="black")
+for (x in x_annot) {
+    p <- p + annotate("path", x = rep(x, 2), y = c(0, 0.05), color = "black")
 }
 
-p <- p + annotate("point", x=admix_annot$X, y=admix_annot$Y, color="white", shape="*", size=6)
+p <- p + annotate("point", x = admix_annot$X, y = admix_annot$Y, color = "white", shape = "*", size = 6)
 
 
 
-for(i in seq_along(x_midpts)){
+for (i in seq_along(x_midpts)) {
     x <- x_midpts[i]
     sp <- admix_info[["ord"]][, levels(species)][i]
-    p <- p + annotate("text", x=x, y=0.05, label=ConvertSpeciesNames(sp), hjust="center", color="black", fontface="italic", size=3)
+    p <- p + annotate("text", x = x, y = 0.05, label = ConvertSpeciesNames(sp), hjust = "center", color = "black", fontface = "italic", size = 3)
 }
-# ggsave(p, file=tmp_pdf, width=8, height=2)
+# ggsave(p, file = tmp_pdf, width = 8, height = 2)
 
 plist[["admix"]] <- p
 print(p)
@@ -288,8 +301,8 @@ print(p)
 ```{r prepEEMS}
 # Get EEMS results paths
 eems_info <- list()
-for(sp in SpeciesNames("short")){
-    res_dir <- ResDirFromParams("multi", "cusp_drum_roem", min_samp=0.7, mind=0.25)
+for (sp in SpeciesNames("short")) {
+    res_dir <- ResDirFromParams("multi", "cusp_drum_roem", min_samp = 0.7, mind = 0.25)
     eems_info[[sp]] <- str_interp("${res_dir}/eems/${sp}/populations.snps.lFilt.iFilt.eems_out")
 }
 
@@ -302,119 +315,134 @@ eems_info[["eems_colors"]] <- eems_colors
 
 ## Plot
 
-```{r plotEEMS, warning=FALSE, message=FALSE, fig.width=10, fig.height=10}
-AnnotTexasBorder <- function(p, bounding_box=TRUE, bounding_box_color="black", thirds=TRUE, thirds_labs=FALSE){
-    texas <- LoadTexasBorder()
+```{r plotEEMS, warning = FALSE, message = FALSE, fig.width = 10, fig.height = 10}
+AnnotTexasBorder <- function(p, bounding_box = TRUE, bounding_box_color = "black", thirds = TRUE, thirds_labs = FALSE) {
+    require(ggplot2)
+    require(data.table)
+    L2 <- LONG <- LAT <- NULL # for linting
+    texas <- LoadTexasBorder() # nolint: object_usage_linter.
     p <- p + annotate(
-            "path", 
-            x=texas[L2 == 1, LONG], 
-            y=texas[L2 == 1, LAT], 
-            color="black"
-        )
+        "path",
+        x = texas[L2 == 1, LONG],
+        y = texas[L2 == 1, LAT],
+        color = "black"
+    )
 
-    cur_lim <- GetPlotLimits(p)
+    cur_lim <- GetPlotLimits(p) # nolint: object_usage_linter.
 
-    if(thirds){
+    if (thirds) {
         thirds_color <- "#999999"
-        intercepts <- t(apply(cur_lim, 1, function(a) round(seq(a[1], a[2], length.out=4)[2:3], 1)))
+        intercepts <- t(apply(cur_lim, 1, function(a) round(seq(a[1], a[2], length.out = 4)[2:3], 1)))
         cur_dim <- apply(cur_lim, 1, diff)
-        for(i in 1:2){
-            p <- p + geom_vline(xintercept=intercepts["x",i], color=thirds_color, linetype=2, linewidth=0.7)
-            p <- p + geom_hline(yintercept=intercepts["y",i], color=thirds_color, linetype=2, linewidth=0.7)
+        for (i in 1:2) {
+            p <- p + geom_vline(xintercept = intercepts["x", i], color = thirds_color, linetype = 2, linewidth = 0.7)
+            p <- p + geom_hline(yintercept = intercepts["y", i], color = thirds_color, linetype = 2, linewidth = 0.7)
 
-            if(thirds_labs){
-                p <- p + annotate(geom="text", label=sprintf("'%0.1f'*degree", intercepts["x",i]), 
-                            x=intercepts["x",i] - cur_dim['x']*0.01, y=cur_lim["y",1] + cur_dim['y']*0.02,
-                            hjust="right", vjust="bottom",
-                            color=thirds_color, parse=TRUE, size=4)
+            if (thirds_labs) {
+                p <- p + annotate(geom = "text", label = sprintf("'%0.1f'*degree", intercepts["x", i]),
+                                  x = intercepts["x", i] - cur_dim["x"] * 0.01, y = cur_lim["y", 1] + cur_dim["y"] * 0.02,
+                                  hjust = "right", vjust = "bottom",
+                                  color = thirds_color, parse = TRUE, size = 4)
 
-                p <- p + annotate(geom="text", label=sprintf("'%0.1f'*degree", intercepts["y",i]), 
-                            x=cur_lim["x",1] + cur_dim['x']*0.018, y=intercepts["y",i] + cur_dim['y']*0.02,
-                            hjust="left", vjust="bottom", 
-                            color=thirds_color, parse=TRUE, size=4)
+                p <- p + annotate(geom = "text", label = sprintf("'%0.1f'*degree", intercepts["y", i]),
+                                  x = cur_lim["x", 1] + cur_dim["x"] * 0.018, y = intercepts["y", i] + cur_dim["y"] * 0.02,
+                                  hjust = "left", vjust = "bottom",
+                                  color = thirds_color, parse = TRUE, size = 4)
             }
         }
     }
 
-    if(bounding_box){
-        p <- p + coord_cartesian(xlim=cur_lim["x",], ylim=cur_lim["y",], expand=FALSE) +
-            theme(panel.border=element_rect(color=bounding_box_color, fill=NA, linewidth=4))
+    if (bounding_box) {
+        p <- p + coord_cartesian(xlim = cur_lim["x", ], ylim = cur_lim["y", ], expand = FALSE) +
+            theme(panel.border = element_rect(color = bounding_box_color, fill = NA, linewidth = 4))
     }
 
     return(p)
 }
 
-AnnotPopulations <- function(p, cur_samps, met_d, fill_data, aggr_func="mean", color="black"){
+AnnotPopulations <- function(p, cur_samps, met_d, fill_data, aggr_func = "mean", color = "black") {
+    require(data.table)
+    require(ggnewscale)
+    Sample_ID <- Population <- lat <- long <- V1 <- size <- . <- NULL # for linting # nolint: object_name_linter.
+
     annot_d <- met_d[Sample_ID %in% cur_samps, .(Sample_ID, Population, lat, long)]
 
     # Figure out which pops are the "same"
-    tmp <- annot_d[, .(lat=round(lat[1], 4), long=round(long[1], 4)), by=Population]
-    collapse_pops <- strsplit(tmp[, str_c(Population, collapse=","), by=.(lat, long)][str_detect(V1, ","), V1], ",")
-    for(i in seq_along(collapse_pops)){
-        nm <- str_c(collapse_pops[[i]], collapse="/")
+    tmp <- annot_d[, .(lat = round(lat[1], 4), long = round(long[1], 4)), by = Population]
+    collapse_pops <- strsplit(tmp[, str_c(Population, collapse = ","), by = .(lat, long)][str_detect(V1, ","), V1], ",")
+    for (i in seq_along(collapse_pops)) {
+        nm <- str_c(collapse_pops[[i]], collapse = "/")
         annot_d[Population %in% collapse_pops[[i]], Population := nm]
     }
 
-    if(!is.null(fill_data)){
-        annot_d <- merge(annot_d, fill_data, by="Sample_ID")
+    if (!is.null(fill_data)) {
+        annot_d <- merge(annot_d, fill_data, by = "Sample_ID")
         fill_var <- names(fill_data)[names(fill_data) != "Sample_ID"]
 
-        lambda <- eval(parse(text=aggr_func))
-        tmp <- annot_d[, lambda(get(fill_var)), by=Population]$V1
-        annot_d <- annot_d[, .(size=.N, lat=lat[1], long=long[1]), by=Population]
+        lambda <- eval(parse(text = aggr_func))
+        tmp <- annot_d[, lambda(get(fill_var)), by = Population]$V1
+        annot_d <- annot_d[, .(size = .N, lat = lat[1], long = long[1]), by = Population]
         annot_d[, eval(fill_var) := tmp]
 
         # scale_nm <- str_c(str_to_sentence(aggr_func), " ", fill_var)
-        p <- p + new_scale_fill() + geom_point(aes(x=long, y=lat, size=size, fill=.data[[fill_var]]), data=annot_d, shape=21, color=color)# +
-            # scale_fill_viridis(name=scale_nm)
+        p <- p + new_scale_fill() + geom_point(aes(x = long, y = lat, size = size, fill = .data[[fill_var]]), data = annot_d, shape = 21, color = color)
     } else {
-        annot_d <- annot_d[, .(size=.N, lat=lat[1], long=long[1]), by=Population]
-        p <- p + geom_point(aes(x=long, y=lat, size=size), data=annot_d, fill="black", shape=21, color=color, alpha=0.5)
+        annot_d <- annot_d[, .(size = .N, lat = lat[1], long = long[1]), by = Population]
+        p <- p + geom_point(aes(x = long, y = lat, size = size), data = annot_d, fill = "black", shape = 21, color = color, alpha = 0.5)
     }
-    p <- p + guides(size="none")
-    
+    p <- p + guides(size = "none")
+
     return(p)
 }
 
 plist[["eems"]] <- list()
-for(sp in SpeciesNames("short")){
+for (sp in SpeciesNames("short")) {
     # Save plot list object for later retrieval since this can take a while to run.
     tmp_args <- eems_info[names(eems_info)[!(names(eems_info) %in% SpeciesNames("short"))]]
     tmp_args[["mcmcpath"]] <- eems_info[[sp]]
-    dig_str <- digest(object=tmp_args)
+    dig_str <- digest(object = tmp_args)
     rdat_fn <- str_interp("${eems_info[[sp]]}/${dig_str}.Rdata")
-    if(file.exists(rdat_fn)){
+    if (file.exists(rdat_fn)) {
         load(rdat_fn)
     } else {
         p <- do.call(make_eems_plots, tmp_args)
-        save(p, file=rdat_fn)
+        save(p, file = rdat_fn)
     }
 
 
-    for(nm in names(p)){
-        if(str_detect(nm, "rates")){
-            p[[nm]] <- AnnotTexasBorder(p[[nm]], bounding_box_color=Load4SpPal()[sp], thirds_labs=(sp == "drum"))
-            cur_samps <- fread(str_interp("${eems_info[[sp]]}/../populations.snps.lFilt.iFilt.eems.fam"), header=FALSE)$V2
-            if(sp == "drum" && nm =="mrates01"){
-                fill_data <- pca_info$drum$evec[, .(Sample_ID=IID, PC1)]
-                p[[nm]] <- AnnotPopulations(p[[nm]], cur_samps, met_d, fill_data=fill_data) +
-                    scale_fill_gradient2(name="Mean PC1", limits=range(fill_data$PC1), 
-                        low=pc1_color_range[1], mid=pc1_color_range[2], high=pc1_color_range[3])
-            } else if(sp == "drum" && nm == "qrates01"){
+    for (nm in names(p)) {
+        if (str_detect(nm, "rates")) {
+            p[[nm]] <- AnnotTexasBorder(p[[nm]], bounding_box_color = Load4SpPal()[sp], thirds_labs = (sp == "drum"))
+            cur_samps <- fread(str_interp("${eems_info[[sp]]}/../populations.snps.lFilt.iFilt.eems.fam"), header = FALSE)$V2
+            if (sp == "drum" && nm == "mrates01") {
+                fill_data <- pca_info$drum$evec[, .(Sample_ID = IID, PC1)]
+                p[[nm]] <- AnnotPopulations(p[[nm]], cur_samps, met_d, fill_data = fill_data) +
+                    scale_fill_gradient2(name = "Mean PC1",
+                                         limits = range(fill_data$PC1),
+                                         low = pc1_color_range[1],
+                                         mid = pc1_color_range[2],
+                                         high = pc1_color_range[3])
+            } else if (sp == "drum" && nm == "qrates01") {
                 # Change default color scale from blue-orange to cividis
                 cividis_endcolors <- cividis(2)
-                p[[nm]] <- p[[nm]] + scale_fill_gradient2(name="log(q)", low=cividis_endcolors[1], mid="white", high=cividis_endcolors[2], limits=c(-0.1, 0.1)) 
+                p[[nm]] <- p[[nm]] + scale_fill_gradient2(name = "log(q)",
+                                                          low = cividis_endcolors[1],
+                                                          mid = "white",
+                                                          high = cividis_endcolors[2],
+                                                          limits = c(-0.1, 0.1))
 
-                fill_data <- pca_info$drum$evec[, .(Symp=ifelse(FID %in% symp_drum, "sympatry", "allopatry")), by=IID]
+                fill_data <- pca_info$drum$evec[, .(Symp = ifelse(FID %in% symp_drum, "sympatry", "allopatry")), by = IID]
                 setnames(fill_data, "IID", "Sample_ID")
-                
+
                 use_colors <- Load4SpPal("2drum")[c("drumBlue", "drumPink")]
                 names(use_colors) <- c("allopatry", "sympatry")
-                p[[nm]] <- AnnotPopulations(p[[nm]], cur_samps, met_d, fill_data=fill_data, 
-                        aggr_func="function(x) x[1]") +
-                    scale_fill_manual(name="", values=use_colors)
+                p[[nm]] <- AnnotPopulations(p[[nm]],
+                                            cur_samps, met_d,
+                                            fill_data = fill_data,
+                                            aggr_func = "function(x) x[1]") +
+                    scale_fill_manual(name = "", values = use_colors)
             } else {
-                p[[nm]] <- AnnotPopulations(p[[nm]], cur_samps, met_d, fill_data=NULL)
+                p[[nm]] <- AnnotPopulations(p[[nm]], cur_samps, met_d, fill_data = NULL)
             }
         }
     }
@@ -429,40 +457,40 @@ for(sp in SpeciesNames("short")){
 ## Load data
 ```{r loadFst}
 popwise_fst <- list()
-for(sp in SpeciesNames("short")){
-    res_dir <- ResDirFromParams("single", sp, min_samp=0.5, mind=0.5)
+for (sp in SpeciesNames("short")) {
+    res_dir <- ResDirFromParams("single", sp, min_samp = 0.5, mind = 0.5)
     fn <- str_interp("${res_dir}/fis/populations.all.lFilt.iFilt_fis.txt")
-    popwise_fst[[sp]] <- fread(fn, header=TRUE, sep="\t")
+    popwise_fst[[sp]] <- fread(fn, header = TRUE, sep = "\t")
     popwise_fst[[sp]][, SPECIES := sp]
     setnames(popwise_fst[[sp]], letters[1:3], LETTERS[1:3])
 
     # Remove single individual populations
     fn <- str_interp("${res_dir}/populations.all.lFilt.iFilt.pop")
-    pop_d <- fread(fn, header=FALSE, col.names=c("IID","FID"))
-    rm_pops <- pop_d[, length(IID) == 1, by=FID][(V1), FID]
+    pop_d <- fread(fn, header = FALSE, col.names = c("IID", "FID"))
+    rm_pops <- pop_d[, length(IID) == 1, by = FID][(V1), FID]
     popwise_fst[[sp]] <- popwise_fst[[sp]][!(pop1 %in% rm_pops | pop2 %in% rm_pops)]
 }
 popwise_fst <- rbindlist(popwise_fst)
-all_fst <- popwise_fst[!is.na(A)][!is.na(B)][!is.na(C)][, .(FST = sum(A) / sum(A + B + C)), by=.(SPECIES, pop1, pop2)]
-all_fis <- popwise_fst[!is.na(B)][!is.na(C)][, .(FIS = 1 - sum(C) / sum(B + C)), by=.(SPECIES, pop1, pop2)]
+all_fst <- popwise_fst[!is.na(A)][!is.na(B)][!is.na(C)][, .(FST = sum(A) / sum(A + B + C)), by = .(SPECIES, pop1, pop2)]
+all_fis <- popwise_fst[!is.na(B)][!is.na(C)][, .(FIS = 1 - sum(C) / sum(B + C)), by = .(SPECIES, pop1, pop2)]
 
 # We need pairwise distances between drum populations
-pop_loc <- met_d[species %in% SpeciesNames("short"), .(lat=lat[1], long=long[1]), by=Population]
-all_fst <- merge(all_fst, pop_loc, by.x="pop1", by.y="Population", all.x=TRUE)
+pop_loc <- met_d[species %in% SpeciesNames("short"), .(lat = lat[1], long = long[1]), by = Population]
+all_fst <- merge(all_fst, pop_loc, by.x = "pop1", by.y = "Population", all.x = TRUE)
 setnames(all_fst, c("lat", "long"), c("lat1", "long1"))
 
-all_fst <- merge(all_fst, pop_loc, by.x="pop2", by.y="Population", all.x=TRUE)
+all_fst <- merge(all_fst, pop_loc, by.x = "pop2", by.y = "Population", all.x = TRUE)
 setnames(all_fst, c("lat", "long"), c("lat2", "long2"))
 
 # Compute distance
-all_fst[, DIST := haversine(c(lat1, long1), c(lat2, long2)), by=.(pop1, pop2)]
-all_fst[, max_long := max(long1, long2), by=.(pop1, pop2)]
+all_fst[, DIST := haversine(c(lat1, long1), c(lat2, long2)), by = .(pop1, pop2)]
+all_fst[, max_long := max(long1, long2), by = .(pop1, pop2)]
 
-pop_four <- fread("ddRAD_popgen_metadata-populations_RH.Pop_4grp.tsv", header=TRUE)
-all_fst <- merge(all_fst, pop_four, by.x="pop1", by.y="Population", all.x=TRUE)
+pop_four <- fread("ddRAD_popgen_metadata-populations_RH.Pop_4grp.tsv", header = TRUE)
+all_fst <- merge(all_fst, pop_four, by.x = "pop1", by.y = "Population", all.x = TRUE)
 all_fst[is.na(Four_groups), Four_groups := "none"]
 setnames(all_fst, "Four_groups", "Four_groups1")
-all_fst <- merge(all_fst, pop_four, by.x="pop2", by.y="Population", all.x=TRUE)
+all_fst <- merge(all_fst, pop_four, by.x = "pop2", by.y = "Population", all.x = TRUE)
 all_fst[is.na(Four_groups), Four_groups := "none"]
 setnames(all_fst, "Four_groups", "Four_groups2")
 ```
@@ -471,25 +499,26 @@ setnames(all_fst, "Four_groups", "Four_groups2")
 
 As individual figures
 
-```{r plotIsoByDist, fig.width=5, fig.height=4}
+```{r plotIsoByDist, fig.width = 5, fig.height = 4}
 # Separate plots
-plist[['ibd']] <- list()
-for(sp in SpeciesNames("short")){
+plist[["ibd"]] <- list()
+for (sp in SpeciesNames("short")) {
     p <- ggscatter(
-        all_fst[SPECIES == sp], 
-        x="DIST", 
-        y="FST", 
-        add="reg.line",
-        conf.int=TRUE,
-        color="max_long",
-        # color=Load4SpPal()["drum"], 
-        cor.coef=TRUE,
-        alpha=0.5,
-        xlab="Population distance (km)",
-        ylab="Fst")
-    p <- p + scale_color_viridis(option="plasma")
+        all_fst[SPECIES == sp],
+        x = "DIST",
+        y = "FST",
+        add = "reg.line",
+        conf.int = TRUE,
+        color = "max_long",
+        # color = Load4SpPal()["drum"],
+        cor.coef = TRUE,
+        alpha = 0.5,
+        xlab = "Population distance (km)",
+        ylab = "Fst"
+    )
+    p <- p + scale_color_viridis(option = "plasma")
 
-    plist[['ibd']][[sp]] <- p
+    plist[["ibd"]][[sp]] <- p
     print(p)
 }
 ```
@@ -497,128 +526,127 @@ for(sp in SpeciesNames("short")){
 and as a faceted plot. We're also going to run a regression
 for only FST between sympatric drummondii and non-sympatric drummondii.
 
-```{r plotIsobyDistFact, fig.width=12, height=4}
+```{r plotIsobyDistFact, fig.width = 12, height = 4}
 include_allosymp <- TRUE
 # Faceted plot
 # get ordering correct...
-all_fst[, SPECIES := factor(SPECIES, levels=c("roem", "drum", "cusp"))]
+all_fst[, SPECIES := factor(SPECIES, levels = c("roem", "drum", "cusp"))]
 
 all_fst_lm <- list()
 annot_d <- list()
 label_d <- list()
-for(sp in levels(all_fst$SPECIES)){
+for (sp in levels(all_fst$SPECIES)) {
     all_fst_lm[[sp]] <- RunOLS(all_fst[SPECIES == sp], "DIST", "FST")
-    if(sp == "drum"){
+    if (sp == "drum") {
         all_fst_lm[["allo_symp"]] <- RunOLS(all_fst[((Four_groups1 == "WestRed") + (Four_groups2 == "WestRed")) == 1], "DIST", "FST")
     }
 
-    if(sp == "cusp"){
-        all_fst_lm[["cusp_no_668"]] <- RunOLS(all_fst[SPECIES==sp][(pop1 != "668") & (pop2 != "668")], "DIST", "FST")
+    if (sp == "cusp") {
+        all_fst_lm[["cusp_no_668"]] <- RunOLS(all_fst[SPECIES == sp][(pop1 != "668") & (pop2 != "668")], "DIST", "FST")
     }
 
 
     annot_d[[sp]] <- all_fst_lm[[sp]][["fitdat"]]
     annot_d[[sp]][, SPECIES := sp]
     annot_d[[sp]][, LABEL   := sp]
-    
+
     lab_pos <- all_fst[SPECIES == sp, c(min(DIST), max(FST))]
-    stat_str <- FormatR2PvalLab( unlist(all_fst_lm[[sp]][c("rsq", "pval")]))
-    label_d[[sp]] <- data.table(x=lab_pos[1], y=lab_pos[2], lab=stat_str, SPECIES = sp)
+    stat_str <- FormatR2PvalLab(unlist(all_fst_lm[[sp]][c("rsq", "pval")]))
+    label_d[[sp]] <- data.table(x = lab_pos[1], y = lab_pos[2], lab = stat_str, SPECIES = sp)
 }
 label_d <- rbindlist(label_d)
-label_d[, SPECIES := factor(SPECIES, levels=c("roem", "drum", "cusp"))]
+label_d[, SPECIES := factor(SPECIES, levels = c("roem", "drum", "cusp"))]
 
-if(include_allosymp){
+if (include_allosymp) {
     annot_d[[4]] <- all_fst_lm[["allo_symp"]][["fitdat"]]
     annot_d[[4]][, SPECIES := "drum"]
     annot_d[[4]][, LABEL   := "allo vs symp"]
-    
+
     use_colors <- Load4SpPal("2drum")
     col_brks <- c("roem", "drum", "allo vs symp", "cusp")
     col_labs <- c(ConvertSpeciesNames(col_brks[1:2]), "P. drummondii: allopatric vs. sympatric", ConvertSpeciesNames(col_brks[4]))
     names(use_colors)[names(use_colors) == "drumBlue"] <- "drum"
     names(use_colors)[names(use_colors) == "drumPink"] <- "allo vs symp"
-    
+
     annot_d <- rbindlist(annot_d)
-    annot_d[, SPECIES := factor(SPECIES, levels=col_brks[col_brks != "allo vs symp"])]
-    annot_d[, LABEL   := factor(LABEL,   levels=col_brks)]
+    annot_d[, SPECIES := factor(SPECIES, levels = col_brks[col_brks != "allo vs symp"])]
+    annot_d[, LABEL   := factor(LABEL,   levels = col_brks)]
 } else {
     use_colors <- Load4SpPal()
     col_brks <- c("roem", "drum", "cusp")
     col_labs <- ConvertSpeciesNames(col_brks)
-    
+
     annot_d <- rbindlist(annot_d)
-    annot_d[, SPECIES := factor(SPECIES, levels=col_brks)]
-    annot_d[, LABEL   := factor(LABEL,   levels=col_brks)]
+    annot_d[, SPECIES := factor(SPECIES, levels = col_brks)]
+    annot_d[, LABEL   := factor(LABEL,   levels = col_brks)]
 }
 
-p <- ggplot() + 
-    geom_point(aes(x=DIST, y=FST, color=SPECIES), data=all_fst, alpha=0.5) + 
-    geom_ribbon(aes(x=DIST, ymin=LWR, ymax=UPR, fill=LABEL), data=annot_d, alpha=0.3, color=NA) +
-    geom_line(aes(x=DIST, y=FST, color=LABEL), data=annot_d, linewidth=1) +
-    scale_fill_manual(values=use_colors, guide="none") +
-    scale_color_manual(values=use_colors, name="Regression", breaks=col_brks, labels=col_labs) +
-    geom_text(aes(x=x, y=y, label=lab), data=label_d, parse=TRUE, hjust=0)#, vjust=1)
+p <- ggplot() +
+    geom_point(aes(x = DIST, y = FST, color = SPECIES), data = all_fst, alpha = 0.5) +
+    geom_ribbon(aes(x = DIST, ymin = LWR, ymax = UPR, fill = LABEL), data = annot_d, alpha = 0.3, color = NA) +
+    geom_line(aes(x = DIST, y = FST, color = LABEL), data = annot_d, linewidth = 1) +
+    scale_fill_manual(values = use_colors, guide = "none") +
+    scale_color_manual(values = use_colors, name = "Regression", breaks = col_brks, labels = col_labs) +
+    geom_text(aes(x = x, y = y, label = lab), data = label_d, parse = TRUE, hjust = 0)#, vjust = 1)
 
-if(include_allosymp){
-    tmp_d <- label_d[SPECIES=="drum"]
+if (include_allosymp) {
+    tmp_d <- label_d[SPECIES == "drum"]
     tmp_d[, y := 0.9 * y]
-    tmp_d[, lab := FormatR2PvalLab( unlist(all_fst_lm[["allo_symp"]][c("rsq", "pval")]) )]
-    p <- p + geom_text(
-                aes(x=x, y=y, label=lab), 
-                data=tmp_d, 
-                parse=TRUE, 
-                color=use_colors["allo vs symp"], 
-                hjust=0)#, vjust=1)
+    tmp_d[, lab := FormatR2PvalLab(unlist(all_fst_lm[["allo_symp"]][c("rsq", "pval")]))]
+    p <- p + geom_text(aes(x = x, y = y, label = lab),
+                       data = tmp_d,
+                       parse = TRUE,
+                       color = use_colors["allo vs symp"],
+                       hjust = 0)#, vjust = 1)
 }
 
 p <- p +
-    facet_wrap(vars(SPECIES), nrow=1, scales="free") + 
+    facet_wrap(vars(SPECIES), nrow = 1, scales = "free") +
     xlab("Population pair distance (km)") +
     ylab("Fst") +
     theme_pubr() +
-    theme(strip.background=element_blank(), strip.text.x=element_blank())
+    theme(strip.background = element_blank(), strip.text.x = element_blank())
 
-ggsave(p, file=tmp_pdf, width=12, height=4)
+ggsave(p, file = tmp_pdf, width = 12, height = 4)
 
 # stat_str <- FormatR2PvalLab( unlist(all_fst_lm[["allo_symp"]][c("rsq", "pval")]) )
-#     label_d[[4]] <- data.table(x=-Inf, y=Inf, lab=stat_str, SPECIES = )
-plist[['ibd']][["all"]] <- p
+#     label_d[[4]] <- data.table(x = -Inf, y = Inf, lab = stat_str, SPECIES = )
+plist[["ibd"]][["all"]] <- p
 print(p)
 ```
 
 Finally, plot just drummondii data but separated by whether a sympatric population
 is involved
 
-```{r plotIsoByDistSymp, fig.width=9, fig.height=3}
+```{r plotIsoByDistSymp, fig.width = 9, fig.height = 3}
 plt_d <- all_fst[SPECIES == "drum"]
 plt_d[, SYMP := "none"]
 plt_d[pop1 %in% symp_drum | pop2 %in% symp_drum, SYMP := "one"]
 plt_d[pop1 %in% symp_drum & pop2 %in% symp_drum, SYMP := "both"]
-plt_d[, SYMP := factor(SYMP, levels=c("none", "one", "both"))]
+plt_d[, SYMP := factor(SYMP, levels = c("none", "one", "both"))]
 
 pal <- Load4SpPal("2drum")
-use_colors <- c("none"=unname(pal["drumBlue"]), "one"="#D1A4BB", "both"=unname(pal["drumPink"]))
+use_colors <- c("none" = unname(pal["drumBlue"]), "one" = "#D1A4BB", "both" = unname(pal["drumPink"]))
 
 p <- ggscatter(
-    plt_d, 
-    x="DIST", 
-    y="FST", 
-    # add="reg.line",
-    # conf.int=TRUE,
-    color="SYMP",
-    cor.coef=TRUE,
-    alpha=0.7,
-    xlab="Population distance (km)",
-    ylab="Fst"
+    plt_d,
+    x = "DIST",
+    y = "FST",
+    # add = "reg.line",
+    # conf.int = TRUE,
+    color = "SYMP",
+    cor.coef = TRUE,
+    alpha = 0.7,
+    xlab = "Population distance (km)",
+    ylab = "Fst"
 )
 
-p <- p + 
-    geom_smooth(method="lm") +
-    scale_color_manual(values=use_colors) +
-    # scale_color_manual(name="Sympatric pops", values=use_colors) +
-    facet_wrap(vars(SYMP), nrow=1) + 
-    guides(color="none")
+p <- p +
+    geom_smooth(method = "lm") +
+    scale_color_manual(values = use_colors) +
+    # scale_color_manual(name = "Sympatric pops", values = use_colors) +
+    facet_wrap(vars(SYMP), nrow = 1) +
+    guides(color = "none")
 print(p)
 plist[["ibd"]][["symp"]] <- p
 ```
@@ -631,73 +659,82 @@ Using Population as the grouping variable. For drummondii, also test Allo vs Sym
 
 ## Run
 ```{r runAmova}
-RunAmova <- function(prefix, grp_dat, id_col="Sample_ID", force=FALSE){
-    dig_str <- str_c(
-        system(str_interp("md5sum ${prefix}.tped | cut -f 1 -d ' '"), intern=TRUE), 
-        digest(object=grp_dat), sep=".")
-    dname <- dirname(prefix)
+RunAmova <- function(prefix, grp_dat, id_col = "Sample_ID", force = FALSE) {
+    require(digest)
+    require(stringr)
+    require(data.table)
+    require(adegenet)
+    require(poppr)
+    ID <- IID <- NULL # for linter
+
+    dig_str <- str_c( # nolint: object_usage_linter.
+        system(str_interp("md5sum ${prefix}.tped | cut -f 1 -d ' '"), intern = TRUE),
+        digest(object = grp_dat),
+        sep = "."
+    )
+    dname <- dirname(prefix) # nolint: object_usage_linter.
     rdat_fn <- str_interp("${dname}/${dig_str}.Rdata")
-    
-    if(file.exists(rdat_fn) && !force){
+
+    if (file.exists(rdat_fn) && !force) {
         cat(str_interp("Loading data from ${rdat_fn}\n"))
         load(rdat_fn)
         return(amova_res)
     }
-    
-    fam <- fread(str_interp("${prefix}.tfam"), header=FALSE, select=1:2)
+
+    fam <- fread(str_interp("${prefix}.tfam"), header = FALSE, select = 1:2)
     names(fam) <- c("FID", "IID")
     fam <- fam[IID %in% grp_dat[[id_col]]]
 
-    tmp_prefix <- str_c(tempdir(), "/file")
-    fwrite(fam, file=str_interp("${tmp_prefix}.keep"), row.names=FALSE, col.names=FALSE, sep="\t", quote=FALSE)
+    tmp_prefix <- str_c(tempdir(), "/file") # nolint: object_usage_linter.
+    fwrite(fam, file = str_interp("${tmp_prefix}.keep"), row.names = FALSE, col.names = FALSE, sep = "\t", quote = FALSE)
 
     system(str_interp("${plink_path} --tfile ${prefix} --allow-extra-chr --keep ${tmp_prefix}.keep --recode --out ${tmp_prefix}"))
     system(str_interp("${plink_path} --tfile ${prefix} --allow-extra-chr --keep ${tmp_prefix}.keep --recode 12 A --out ${tmp_prefix}"))
 
-    genlight_obj <- adegenet::read.PLINK(str_interp("${tmp_prefix}.raw"), map.file=str_interp("${tmp_prefix}.map"))
-    
+    genlight_obj <- adegenet::read.PLINK(str_interp("${tmp_prefix}.raw"), map.file = str_interp("${tmp_prefix}.map"))
+
     setnames(grp_dat, id_col, "ID")
     setkey(grp_dat, ID)
 
-    newstrata <- grp_dat[indNames(genlight_obj),]
+    newstrata <- grp_dat[adegenet::indNames(genlight_obj), ]
     newstrata[, ID := NULL]
 
-    strata(genlight_obj) <- newstrata
-    form_str <- str_c("~", str_c(colnames(newstrata), collapse="/"), sep="")
+    adegenet::strata(genlight_obj) <- newstrata
+    form_str <- str_c("~", str_c(colnames(newstrata), collapse = "/"), sep = "")
     use_form <- as.formula(form_str)
     cat(str_interp("Using formula ${form_str}\n"))
-    amova_res <- poppr.amova(genlight_obj, hier=use_form, within=TRUE, method="pegas", nperm=500)
-    save(amova_res, file=rdat_fn)
+    amova_res <- poppr.amova(genlight_obj, hier = use_form, within = TRUE, method = "pegas", nperm = 500)
+    save(amova_res, file = rdat_fn)
     return(amova_res)
 }
 
 amova_info <- list()
-for(sp in SpeciesNames()){
-    # res_dir <- ResDirFromParams("single", sp, min_samp=0.7, mind=0.25)
-    res_dir <- ResDirFromParams("multi", "cusp_drum_roem", min_samp=0.7, mind=0.25)
+for (sp in SpeciesNames()) {
+    # res_dir <- ResDirFromParams("single", sp, min_samp = 0.7, mind = 0.25)
+    res_dir <- ResDirFromParams("multi", "cusp_drum_roem", min_samp = 0.7, mind = 0.25)
     tfile_prefix <- str_interp("${res_dir}/pca_impute/populations.snps.lFilt.iFilt.pca.impute.missForest")
-    
-    grp_dat <- met_d[species==sp, .(Sample_ID, Population)]
-    amova_info[[sp]] <- RunAmova(tfile_prefix, grp_dat)#, force=TRUE)
 
-    if(sp == "drum"){
-        grp_dat <- met_d[species==sp, .(Sample_ID, Population)]
-        grp_dat <- merge(grp_dat, pop_four, by="Population", all.x=TRUE)
+    grp_dat <- met_d[species == sp, .(Sample_ID, Population)]
+    amova_info[[sp]] <- RunAmova(tfile_prefix, grp_dat)#, force = TRUE)
+
+    if (sp == "drum") {
+        grp_dat <- met_d[species == sp, .(Sample_ID, Population)]
+        grp_dat <- merge(grp_dat, pop_four, by = "Population", all.x = TRUE)
         grp_dat[, Region := "Allopatry"]
         grp_dat[Four_groups == "WestRed", Region := "Sympatry"]
         grp_dat[, Four_groups := NULL]
         setcolorder(grp_dat, c("Region", "Population", "Sample_ID"))
-        amova_info[["allo_symp"]] <- RunAmova(tfile_prefix, grp_dat)#, force=TRUE)
+        amova_info[["allo_symp"]] <- RunAmova(tfile_prefix, grp_dat)#, force = TRUE)
     }
 }
 ```
 
 ## Report results
 ```{r rptAmova}
-for(nm in names(amova_info)){
+for (nm in names(amova_info)) {
     x <- amova_info[[nm]]$varcomp
-    x <- cbind(x, "PctVar"=x[,1] / sum(x[,1]) * 100)
-    cat("\n", nm, "\n", sep="")
+    x <- cbind(x, "PctVar" = x[, 1] / sum(x[, 1]) * 100)
+    cat("\n", nm, "\n", sep = "")
     print(x)
 }
 ```
@@ -705,7 +742,7 @@ for(nm in names(amova_info)){
 ## Plot
 
 Percent explained ...
-```{r plotAmovaPct, fig.width=6, fig.height=3}
+```{r plotAmovaPct, fig.width = 6, fig.height = 3}
 plist[["amova"]] <- list()
 
 lvls <- c("Between pop", "Within pop, between ind", "Within ind")
@@ -714,22 +751,22 @@ names(use_colors) <- lvls
 # use_ylab[["raw"]] <- expression("Genetic variance component"~sigma^2)
 
 plt_d <- list()
-for(sp in SpeciesNames()){
-    y <- amova_info[[sp]]$varcomp[,1]
+for (sp in SpeciesNames()) {
+    y <- amova_info[[sp]]$varcomp[, 1]
     y <- y / sum(y)
-    plt_d[[sp]] <- data.table(SPECIES=sp, PART=lvls, Y=y)
+    plt_d[[sp]] <- data.table(SPECIES = sp, PART = lvls, y = y)
 }
-    
-plt_d <- rbindlist(plt_d)
-plt_d[, PART := factor(PART, levels=lvls)]
-plt_d[, SPECIES := factor(ConvertSpeciesNames(SPECIES), 
-                        levels=ConvertSpeciesNames(c("cusp", "drum", "roem")))]
 
-p <- ggbarplot(plt_d, x="SPECIES", y="Y", fill="PART") +
-    scale_fill_manual(name="Partition", values=use_colors) +
+plt_d <- rbindlist(plt_d)
+plt_d[, PART := factor(PART, levels = lvls)]
+plt_d[, SPECIES := factor(ConvertSpeciesNames(SPECIES),
+                          levels = ConvertSpeciesNames(c("cusp", "drum", "roem")))]
+
+p <- ggbarplot(plt_d, x = "SPECIES", y = "Y", fill = "PART") +
+    scale_fill_manual(name = "Partition", values = use_colors) +
     xlab("") + ylab("Proportion genetic variance explained") +
-    coord_flip() + 
-    theme(axis.text.y=element_text(face="italic"))
+    coord_flip() +
+    theme(axis.text.y = element_text(face = "italic"))
 print(p)
 
 plist[["amova"]][["norm"]] <- p
@@ -737,26 +774,26 @@ plist[["amova"]][["norm"]] <- p
 
 Raw ...
 
-```{r plotAmovaRaw, fig.width=6, fig.height=3}
+```{r plotAmovaRaw, fig.width = 6, fig.height = 3}
 use_colors <- Load4SpPal()
 names(use_colors) <- ConvertSpeciesNames(names(use_colors))
 
 plt_d <- list()
-for(sp in SpeciesNames()){
-    y <- sum(amova_info[[sp]]$varcomp[,1])
-    plt_d[[sp]] <- data.table(SPECIES=sp, Y=y)
+for (sp in SpeciesNames()) {
+    y <- sum(amova_info[[sp]]$varcomp[, 1])
+    plt_d[[sp]] <- data.table(SPECIES = sp, y = y)
 }
-    
-plt_d <- rbindlist(plt_d)
-plt_d[, SPECIES := factor(ConvertSpeciesNames(SPECIES), 
-                        levels=ConvertSpeciesNames(c("cusp", "drum", "roem")))]
 
-p <- ggbarplot(plt_d, x="SPECIES", y="Y", fill="SPECIES", color=NA) +
-    scale_fill_manual(name="Partition", values=use_colors) +
+plt_d <- rbindlist(plt_d)
+plt_d[, SPECIES := factor(ConvertSpeciesNames(SPECIES),
+                          levels = ConvertSpeciesNames(c("cusp", "drum", "roem")))]
+
+p <- ggbarplot(plt_d, x = "SPECIES", y = "Y", fill = "SPECIES", color = NA) +
+    scale_fill_manual(name = "Partition", values = use_colors) +
     xlab("") + ylab(expression(sigma^2)) +
-    coord_flip() + 
-    theme(axis.text.y=element_text(face="italic"), 
-         legend.position="none")
+    coord_flip() +
+    theme(axis.text.y = element_text(face = "italic"),
+          legend.position = "none")
 print(p)
 
 plist[["amova"]][["raw"]] <- p
@@ -768,22 +805,16 @@ plist[["amova"]][["raw"]] <- p
 
 (Data already loaded) when loading FST data
 
-```{r plotFIS, fig.width=5, fig.height=6}
-all_fis[, SPECIES := factor(SPECIES, levels=c("roem", "drum", "cusp"))]
+```{r plotFIS, fig.width = 5, fig.height = 6}
+all_fis[, SPECIES := factor(SPECIES, levels = c("roem", "drum", "cusp"))]
 
-# annot_d <- all_fis[, as.list(quantile(FIS, probs=c(0.25, 0.5, 0.75))), by=SPECIES]
-# setnames(annot_d, c("25%", "50%", "75%"), c("LWR", "MED", "UPR"))
-# annot_d[, SPECIES := factor(SPECIES, levels=c("roem", "drum", "cusp"))]
-addparams <- list(fill=NA, color="black", width=0.1)
-p <- ggviolin(
-        all_fis, 
-        x="SPECIES", y="FIS", 
-        color="black", fill="SPECIES",#) +
-        add="median_iqr", add.params=addparams, error.plot = "crossbar") + 
-    # scale_color_manual(values=Load4SpPal()) + 
-    scale_fill_manual(values=Load4SpPal()) #+
-    # geom_pointrange(aes(x=SPECIES, y=MED, ymin=LWR, ymax=UPR), data=annot_d, shape=4)
-# ggsave(p, file=tmp_pdf)
+addparams <- list(fill = NA, color = "black", width = 0.1)
+p <- ggviolin(all_fis,
+              x = "SPECIES", y = "FIS",
+              color = "black", fill = "SPECIES",
+              add = "median_iqr", add.params = addparams, error.plot = "crossbar") +
+    scale_fill_manual(values = Load4SpPal()) #+
+# ggsave(p, file = tmp_pdf)
 print(p)
 ```
 
@@ -792,44 +823,44 @@ print(p)
 ## Load data
 ```{r loadHet}
 het_info <- list()
-for(sp in SpeciesNames("short")){
-    res_dir <- ResDirFromParams("single", sp, min_samp=0.5, mind=0.5)
+for (sp in SpeciesNames("short")) {
+    res_dir <- ResDirFromParams("single", sp, min_samp = 0.5, mind = 0.5)
     fn <- str_interp("${res_dir}/vcfhet/populations.snps.lFilt.iFilt.het")
-    het_info[[sp]] <- fread(fn, header=TRUE)
+    het_info[[sp]] <- fread(fn, header = TRUE)
     het_info[[sp]][, SPECIES := sp]
 }
 het_info <- rbindlist(het_info)
 setnames(het_info, c("INDV", "O(HOM)", "E(HOM)"), c("IID", "O_HOM", "E_HOM"))
 
-het_info[, SPECIES := factor(SPECIES, levels=c("roem", "drum", "cusp"))]
+het_info[, SPECIES := factor(SPECIES, levels = c("roem", "drum", "cusp"))]
 ```
 
 When plotting filter out possible hybrids
 
-```{r plotHet, fig.width=3.5, fig.height=4}
+```{r plotHet, fig.width = 3.5, fig.height = 4}
 # First remove the samples that appear to be admixed (from admixture code above)
 rm_samps <- admix_samps
 plt_d <- het_info[!(IID %in% rm_samps)]
 
 detect_outliers <- FALSE
-if(detect_outliers){
-    p <- ggboxplot(plt_d, x="SPECIES", y="F", fill="SPECIES", alpha=0.7)
+if (detect_outliers) {
+    p <- ggboxplot(plt_d, x = "SPECIES", y = "Fstat", fill = "SPECIES", alpha = 0.7)
 } else {
-    plt_d <- plt_d[, as.list(quantile(F, (0:4) / 4)), by=SPECIES]
-    setnames(plt_d, 
-        str_c((0:4) /  4 * 100, "%"), 
+    plt_d <- plt_d[, as.list(quantile(Fstat, (0:4) / 4)), by = SPECIES]
+    setnames(plt_d,
+        str_c((0:4) /  4 * 100, "%"),
         c("MIN", "Q1", "MED", "Q3", "MAX")
     )
-    p <- ggplot(plt_d, aes(x=SPECIES, ymin=MIN, lower=Q1, middle=MED, upper=Q3, ymax=MAX, fill=SPECIES)) + 
-        geom_boxplot(stat="identity", alpha=0.7) + theme_pubr()
+    p <- ggplot(plt_d, aes(x = SPECIES, ymin = MIN, lower = Q1, middle = MED, upper = Q3, ymax = MAX, fill = SPECIES)) +
+        geom_boxplot(stat = "identity", alpha = 0.7) + theme_pubr()
 }
-p <- p + scale_fill_manual(name="species", values=Load4SpPal()) +
+p <- p + scale_fill_manual(name = "species", values = Load4SpPal()) +
     ylab("Inbreeding coefficient (F)") +
-    theme(legend.position="none",
-        axis.title.x=element_blank())
+    theme(legend.position = "none",
+          axis.title.x = element_blank())
 plist[["het"]] <- p
 print(p)
-# ggsave(p, file=tmp_pdf, width=3.5, height=4)
+# ggsave(p, file = tmp_pdf, width = 3.5, height = 4)
 ```
 
 
@@ -837,23 +868,22 @@ print(p)
 
 ## Load data
 ```{r loadPixy}
-res_dir <- ResDirFromParams("multi", "cusp_drum_roem", min_samp=0.1, mind=0.9)
-# res_dir <- ResDirFromParams("multi", "cusp_drum_roem", min_samp=0.5, mind=0.5)
+res_dir <- ResDirFromParams("multi", "cusp_drum_roem", min_samp = 0.1, mind = 0.9)
 pixy_info <- list()
 
 fn <- str_interp("${res_dir}/pixy/populations.all.lFilt.iFilt_pi.txt")
-pixy_info[["pi_w"]] <- fread(fn, header=TRUE)
+pixy_info[["pi_w"]] <- fread(fn, header = TRUE)
 setnames(pixy_info[["pi_w"]], "pop", "SPECIES")
-pixy_info[["pi_w"]][, SPECIES := factor(SPECIES, levels=c("roem", "drum", "cusp"))]
+pixy_info[["pi_w"]][, SPECIES := factor(SPECIES, levels = c("roem", "drum", "cusp"))]
 
-pixy_info[["pi_a"]] <- pixy_info[["pi_w"]][!is.na(count_diffs), BootstrapWtAvg(count_diffs, count_comparisons), by=.(SPECIES)]
+pixy_info[["pi_a"]] <- pixy_info[["pi_w"]][!is.na(count_diffs), BootstrapWtAvg(count_diffs, count_comparisons), by = .(SPECIES)]
 print(pixy_info[["pi_a"]])
 
 
 fn <- str_interp("${res_dir}/pixy/populations.all.lFilt.iFilt_dxy.txt")
-pixy_info[["dxy_w"]] <- fread(fn, header=TRUE)
+pixy_info[["dxy_w"]] <- fread(fn, header = TRUE)
 
-pixy_info[["dxy_a"]] <- pixy_info[["dxy_w"]][!is.na(count_diffs), BootstrapWtAvg(count_diffs, count_comparisons), by=.(pop1, pop2)]
+pixy_info[["dxy_a"]] <- pixy_info[["dxy_w"]][!is.na(count_diffs), BootstrapWtAvg(count_diffs, count_comparisons), by = .(pop1, pop2)]
 print(pixy_info[["dxy_a"]])
 ```
 
@@ -863,56 +893,58 @@ print(pixy_info[["dxy_a"]])
 ... Removed ...
 
 ## Version 2
-```{r plotFullFig2, fig.width=14, fig.height=14}
+```{r plotFullFig2, fig.width = 14, fig.height = 14}
 # Row 1
-pPcaAll <- plist$pca$three + theme(legend.position=c(0.8, 0.8), legend.direction="vertical", legend.text=element_text(face="italic"))
-pAdmix  <- plist$admix + theme(title=element_blank(), legend.position="none")
-# pHet    <- plist$het + coord_flip() + theme(axis.title.y=element_blank(), axis.title.x=element_text())
-pAmovaRaw  <- plist$amova$raw + theme(panel.background=element_blank())
-pAmovaNorm  <- plist$amova$norm + theme(axis.title.y=element_blank(), 
-                                        axis.text.y=element_blank(), 
-                                        panel.background=element_blank(),
-                                        legend.position="right")
+pPcaAll <- plist$pca$three + theme(legend.position = c(0.8, 0.8), # nolint: object_name_linter.
+                                   legend.direction = "vertical",
+                                   legend.text = element_text(face = "italic"))
+pAdmix  <- plist$admix + theme(title = element_blank(), legend.position = "none") # nolint: object_name_linter.
+# pHet    <- plist$het + coord_flip() + theme(axis.title.y = element_blank(), axis.title.x = element_text())
+pAmovaRaw  <- plist$amova$raw + theme(panel.background = element_blank()) # nolint: object_name_linter.
+pAmovaNorm  <- plist$amova$norm + theme(axis.title.y = element_blank(), # nolint: object_name_linter.
+                                        axis.text.y = element_blank(),
+                                        panel.background = element_blank(),
+                                        legend.position = "right")
 
 # Row 2
-pPcaDrum <- plist$pca$drum + theme(legend.position=c(0.5, 0.9), legend.direction="horizontal", legend.text=element_text(size=8))
-pEemsMigDrum <- plist$eems$drum$mrates01 + 
-                annotate("text", x=-Inf, y=Inf, hjust=-0.25, vjust=1.7, label=ConvertSpeciesNames("drum"), 
-                        color=Load4SpPal()["drum"], fontface="italic", size=4) +
-                theme(legend.position=c(0.15, 0.7), legend.direction="vertical") + guides(fill="none")
-pEemsMigCusp <- plist$eems$cusp$mrates01 + 
-                annotate("text", x=-Inf, y=Inf, hjust=-0.25, vjust=1.7, label=ConvertSpeciesNames("cusp"), 
-                        color=Load4SpPal()["cusp"], fontface="italic", size=4) +
-                theme(legend.position="none")
-pEemsMigRoem <- plist$eems$roem$mrates01 + 
-                annotate("text", x=-Inf, y=Inf, hjust=-0.25, vjust=1.7, label=ConvertSpeciesNames("roem"), 
-                        color=Load4SpPal()["roem"], fontface="italic", size=4) +
-                theme(legend.position="none")
+pPcaDrum <- plist$pca$drum + theme(legend.position = c(0.5, 0.9), legend.direction = "horizontal", legend.text = element_text(size = 8)) # nolint: object_name_linter.
+pEemsMigDrum <- plist$eems$drum$mrates01 + # nolint: object_name_linter.
+    annotate("text", x = -Inf, y = Inf, hjust = -0.25, vjust = 1.7, label = ConvertSpeciesNames("drum"),
+             color = Load4SpPal()["drum"], fontface = "italic", size = 4) +
+    theme(legend.position = c(0.15, 0.7), legend.direction = "vertical") + guides(fill = "none")
+pEemsMigCusp <- plist$eems$cusp$mrates01 + # nolint: object_name_linter.
+    annotate("text", x = -Inf, y = Inf, hjust = -0.25, vjust = 1.7, label = ConvertSpeciesNames("cusp"),
+             color = Load4SpPal()["cusp"], fontface = "italic", size = 4) +
+    theme(legend.position = "none")
+pEemsMigRoem <- plist$eems$roem$mrates01 + # nolint: object_name_linter.
+    annotate("text", x = -Inf, y = Inf, hjust = -0.25, vjust = 1.7, label = ConvertSpeciesNames("roem"),
+             color = Load4SpPal()["roem"], fontface = "italic", size = 4) +
+    theme(legend.position = "none")
 
 # Row 3
-pIbdAll <- plist$ibd$all
+pIbdAll <- plist$ibd$all # nolint: object_name_linter.
 
 row_h <- cumsum(c(30, 30, 25))
 col_w <- cumsum(c(30, 54))
-col2_splitpoint <- col_w[1] + (diff(col_w) * 2/3)
+col2_splitpoint <- col_w[1] + (diff(col_w) * 2 / 3)
 
 # area(top, left, bottom, right)
 layout <- c(
-    area(1,  1, row_h[1], col_w[1]),   area(1,  col_w[1]+1, row_h[1]/2, col_w[2]), 
-        area(row_h[1]/2+1, col_w[1]+1, row_h[1], round(col_w[1] + diff(col_w)/4)), 
-        area(row_h[1]/2+1, round(col_w[1] + diff(col_w)/4)+1, row_h[1], col_w[2]),
-    area(row_h[1]+1, 1, row_h[2], col_w[1]), area(row_h[1]+1, col_w[1]+1, row_h[2], col2_splitpoint), 
-        area(row_h[1]+1, col2_splitpoint+1, mean(row_h[1:2]), col_w[2]), area(mean(row_h[1:2])+1, col2_splitpoint+1, row_h[2], col_w[2]),
-    area(row_h[2]+1, 1, row_h[3], col_w[2])
+    area(1,  1, row_h[1], col_w[1]),   area(1,  col_w[1] + 1, row_h[1] / 2, col_w[2]),
+    area(row_h[1] / 2 + 1, col_w[1] + 1, row_h[1], round(col_w[1] + diff(col_w) / 4)),
+    area(row_h[1] / 2 + 1, round(col_w[1] + diff(col_w) / 4) + 1, row_h[1], col_w[2]),
+    area(row_h[1] + 1, 1, row_h[2], col_w[1]), area(row_h[1] + 1, col_w[1] + 1, row_h[2], col2_splitpoint),
+    area(row_h[1] + 1, col2_splitpoint + 1, mean(row_h[1:2]), col_w[2]), area(mean(row_h[1:2]) + 1, col2_splitpoint + 1, row_h[2], col_w[2]),
+    area(row_h[2] + 1, 1, row_h[3], col_w[2])
 )
 
 
-p <- pPcaAll + pAdmix + free(pAmovaRaw, side="l") + free(pAmovaNorm, side="r") + 
+p <- pPcaAll + pAdmix + free(pAmovaRaw, side = "l") + free(pAmovaNorm, side = "r") +
     pPcaDrum + pEemsMigDrum + pEemsMigCusp + pEemsMigRoem +
     pIbdAll +
-    plot_layout(design=layout)
+    plot_layout(design = layout)
 
-ggsave(p, file="figure2.pdf", width=14, height=14)
+ggsave(p, file = "figure2.pdf", width = 14, height = 14)
 print(p)
 ```
 
