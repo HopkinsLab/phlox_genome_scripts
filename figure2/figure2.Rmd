@@ -57,7 +57,7 @@ tmp_pdf <- "pdfs/tmp.pdf"
 
 ## Metadata
 ```{r loadMet}
-met_fn <- "metadata.corrected.tsv"
+met_fn <- "metadata.tsv"
 met_d <- fread(met_fn, header = TRUE, sep = "\t", na.strings = c("NA", "#N/A"))
 ```
 
