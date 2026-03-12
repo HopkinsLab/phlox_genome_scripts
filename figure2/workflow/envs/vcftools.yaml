@@ -1,0 +1,6 @@
+name: vcftools
+channels:
+  - bioconda
+dependencies:
+  - bioconda::vcftools
+  - bioconda::htslib

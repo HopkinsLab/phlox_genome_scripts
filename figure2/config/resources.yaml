@@ -1,0 +1,39 @@
+prep_gstacks:
+  threads: 1
+  mem_mb: 8000
+  runtime: 720
+  tmpdir: "/scratch"
+  partition: "serial_requeue"
+
+run_gstacks:
+  threads: 12
+  mem_mb: 48000
+  runtime: 1440
+  tmpdir: "results/tmp"
+  partition: "shared"
+
+run_populations:
+  threads: 8
+  mem_mb: 48000
+  runtime: 1440
+  tmpdir: "results/tmp"
+  partition: "shared"
+
+filter_vcf:
+  threads: 8
+  mem_mb: 8000
+  runtime: 720
+  tmpdir: "results/tmp"
+  partition: "serial_requeue"
+
+vcf_to_plink:
+  mem_mb: 4000
+  runtime: 240
+  tmpdir: "/scratch"
+  partition: "serial_requeue"
+
+make_popfiles:
+  mem_mb: 1000
+  runtime: 20
+  tmpdir: "/scratch"
+  partition: "serial_requeue"

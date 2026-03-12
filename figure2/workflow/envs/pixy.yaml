@@ -1,0 +1,8 @@
+name: pixy
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - conda-forge::pixy
+  - conda-forge::datatable
+  - bioconda::htslib

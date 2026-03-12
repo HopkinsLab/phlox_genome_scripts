@@ -1,0 +1,118 @@
+import yaml, os
+from snakemake.utils import Paramspace
+import pandas as pd
+
+configfile: "config/config.yaml"
+
+# Load resources yaml
+res_config = yaml.load(open("config/resources.yaml"),Loader=yaml.FullLoader)
+
+# Load parameter space (for populations)
+param_dat = pd.read_csv("config/populations_params.tsv", sep="\t")
+paramspace = Paramspace(param_dat)
+
+min_val = param_dat.min()['min_samples_per_pop']
+paramspace_no_min = Paramspace(param_dat.query(f'min_samples_per_pop > {min_val}'))
+
+
+############################################################
+
+rule all:
+    input:
+        expand("results/{breadth}/{sp_grp}/res_stacks/{params}/mind_{mind}/pca_impute/populations.{vcf_types}.lFilt.iFilt.pca.impute.missForest.eigenval", 
+                breadth="multi",
+                sp_grp="cusp_drum_roem", 
+                params=paramspace_no_min.instance_patterns,
+                mind=config["mindValues"],
+                vcf_types = ["snps"]),
+        expand("results/{breadth}/{sp_grp}/res_stacks/{params}/mind_{mind}/pca_impute/populations.{vcf_types}.lFilt.iFilt.pca.impute.missForest.eigenval", 
+                breadth="single",
+                sp_grp=config["species"]["single"].keys(), 
+                params=paramspace_no_min.instance_patterns,
+                mind=config["mindValues"],
+                vcf_types = ["snps"]),
+        expand("results/{breadth}/{sp_grp}/res_stacks/{params}/mind_{mind}/admix/plots/populations.snps.lFilt.iFilt.admix.CV_report.plots.done", 
+                breadth="multi",
+                sp_grp="cusp_drum_roem", 
+                params=paramspace.instance_patterns,
+                mind=config["mindValues"]),
+        expand("results/{breadth}/{sp_grp}/res_stacks/{params}/mind_{mind}/eems/{sp}/populations.snps.lFilt.iFilt.eems.done",
+                breadth="multi",
+                sp_grp="cusp_drum_roem",
+                params=paramspace.instance_patterns,
+                mind=config["mindValues"],
+                sp=config["species"]["multi"]["cusp_drum_roem"]),
+        expand("results/{breadth}/{sp_grp}/res_stacks/{params}/mind_{mind}/populations.all.lFilt.iFilt.vcf.gz.stats",
+                breadth="multi",
+                sp_grp="cusp_drum_roem",
+                params=paramspace.instance_patterns,
+                mind=config["mindValues"]),
+        expand("results/{breadth}/{sp_grp}/res_stacks/{params}/mind_{mind}/pixy/populations.all.lFilt.iFilt_{stat}.txt",
+                breadth="multi",
+                sp_grp="cusp_drum_roem",
+                params=paramspace.instance_patterns,
+                mind=config["mindValues"],
+                stat=["fst", "dxy", "pi"]),
+        expand("results/{breadth}/{sp_grp}/res_stacks/{params}/mind_{mind}/pixy/populations.all.lFilt.iFilt_{stat}.txt",
+                breadth="single",
+                sp_grp=config["species"]["single"].keys(), 
+                params=paramspace.instance_patterns,
+                mind=0.9,
+                stat=["fst", "dxy", "pi"]),
+        expand("results/{breadth}/{sp_grp}/res_stacks/{params}/mind_{mind}/fis/populations.all.lFilt.iFilt_fis.txt",
+                breadth="multi",
+                sp_grp="cusp_drum_roem",
+                params=paramspace.instance_patterns,
+                mind=config["mindValues"]),
+        expand("results/{breadth}/{sp_grp}/res_stacks/{params}/mind_{mind}/fis/populations.all.lFilt.iFilt_fis.txt",
+                breadth="single",
+                sp_grp=config["species"]["single"].keys(), 
+                params=paramspace.instance_patterns,
+                mind=0.9),
+        expand("results/{breadth}/{sp_grp}/res_stacks/{params}/mind_{mind}/vcfhet/populations.snps.lFilt.iFilt.het",
+                breadth="single",
+                sp_grp=config["species"]["single"].keys(), 
+                params=paramspace_no_min.instance_patterns,
+                mind=config["mindValues"]),
+
+
+
+        # ["results/multi/cusp_drum_roem/plots/dxy/plots.done", "results/multi/cusp_drum_roem/plots/fst/plots.done",
+        #  "results/single/plots/pi/plots.done",
+        #  "results/single/plots/fst/plots.done"],
+
+        # expand("results/{breadth}/{sp_grp}/res_stacks/{params}/mind_{mind}/treemix/populations.snps.lFilt.iFilt.input.cov.gz", 
+        #         breadth="multi",
+        #         sp_grp="cusp_drum_roem_pilo", 
+        #         params=paramspace.instance_patterns,
+        #         mind=config["mindValues"]),
+        # expand("results/{breadth}/{sp_grp}/res_stacks/{params}/mind_{mind}/freq/populations.all.lFilt.iFilt.freq.plots.done", 
+        #         breadth="multi",
+        #         sp_grp="cusp_drum_roem_pilo", 
+        #         params=paramspace.instance_patterns,
+        #         mind=config["mindValues"]),
+        # expand("results/{breadth}/{sp_grp}/res_stacks/{params}/mind_{mind}/dstat/populations.snps.lFilt.iFilt.dstat.plots.done", 
+        #         breadth="multi",
+        #         sp_grp="cusp_drum_roem_pilo", 
+        #         params=paramspace.instance_patterns,
+        #         mind=config["mindValues"]),
+        # expand("results/{breadth}/{sp_grp}/res_stacks/{params}/mind_{mind}/populations.{vcf_types}.lFilt.iFilt.vcf.gz", 
+        #         breadth="outgroup",
+        #         sp_grp=config["species"]["outgroup"], 
+        #         params=paramspace.instance_patterns,
+        #         mind=config["mindValues"][1:],
+        #         vcf_types = ["snps", "all"]),
+
+include: "workflow/rules/call_ddrad.smk"
+include: "workflow/rules/pca.smk"
+include: "workflow/rules/pca_impute.smk"
+include: "workflow/rules/freq.smk"
+include: "workflow/rules/dstat.smk"
+include: "workflow/rules/admix.smk"
+include: "workflow/rules/eems.smk"
+include: "workflow/rules/stats.smk"
+# include: "workflow/rules/treemix.smk"
+include: "workflow/rules/pixy.smk"
+include: "workflow/rules/fis.smk"
+include: "workflow/rules/het.smk"
+
