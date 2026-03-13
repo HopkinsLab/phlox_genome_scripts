@@ -240,7 +240,7 @@ target_dark <- "#999999"
 track_nums <- list(drum = 2:3, roem = 4:5, cusp = 6:7)
 
 
-CircosPlot <- function() {
+CircosPlot <- function(outer_only = FALSE) {
     require(circlize)
     require(data.table)
     require(stringr)
@@ -303,6 +303,10 @@ CircosPlot <- function() {
         }
     )
 
+    if (outer_only) {
+        return()
+    }
+
     chrom_levels <- plt_d[, levels(CHROM)]
     for (i in seq_along(chrom_levels)) {
         chrom <- chrom_levels[i]
@@ -322,7 +326,6 @@ CircosPlot <- function() {
         labels.niceFacing = TRUE
     )
     ylab_cex <- ylab_cex - ylab_cex_step
-
 
     ######################################################################
     # [ Tracks 2-4: Pi estimates in drummondii, fst vs roem, fst vs cusp ]
@@ -434,7 +437,7 @@ CircosLegend <- function(kind = "feat",
         fake_dat <- data.frame(x = as.character(rep(seq_along(use_col), 2)),
                                y = rep(seq_along(use_col), 2),
                                grp = factor(rep(names(use_col), 2), levels = names(use_col)))
-        p <- ggpubr::ggline(fake_dat, x = "x", y = "y", color = "grp", plot_type = "l") +
+        p <- ggpubr::ggline(fake_dat, x = "x", y = "y", color = "grp", plot_type = "l", size=2) +
             scale_color_manual(values = use_col) +
             guides(color = guide_legend(title = "Genetic variation",
                                         direction = direction,
@@ -707,7 +710,7 @@ for (sp in names(plt_d)[-1]) {
 ### Plot drummondii repeats along with gene content
 
 ```{r plotDrumPie, fig.width = 6, fig.height = 6}
-txt_size_factor = 1.5
+txt_size_factor <- 1.5
 
 plt_d <- PrepRptPlotData(
     ignore_rpts = c(),
@@ -934,7 +937,6 @@ p <- ggplot(plt_d[SPECIES != "P. pilosa"]) +
     guides(fill = guide_colorbar(title = "Sequence occupancy\nrelative to pilosa",
                                  direction = "vertical",
                                  position = "right")) +
-                                #  position = "inside")) +
     theme(#legend.position.inside = c(0.93, 0.45),
           #legend.background = element_rect(fill = "#FFFFFF88"),
           panel.grid.major.y = element_blank(),
@@ -1243,32 +1245,31 @@ print(plt_d)
 
 # Final Figure 1 plot
 ```{r plotEverything, warning=FALSE, message=FALSE}
-# areas <- c(
-#     patchwork::area(t =  1, l =  1, b = 13, r = 13), # A: Circos
-#     patchwork::area(t = 11, l =  1, b = 12, r =  2), # circos legends
-#     patchwork::area(t = 13, l =  1, b = 13, r =  2), # circos legends
-#     patchwork::area(t = 13, l =  3, b = 13, r =  4), # circos legends
-#     patchwork::area(t =  1, l = 13, b =  8, r = 20), # B: Pie chart
-#     patchwork::area(t =  2, l = 20, b =  7, r = 25), # C: Map
-#     patchwork::area(t =  8, l = 14, b = 10, r = 17), # D: Tree
-#     patchwork::area(t =  8, l = 18, b = 10, r = 25), # E: Multiple alignment
-#     patchwork::area(t = 11, l = 14, b = 13, r = 25)  # F: Repeat data
-# )
+#' Function for defining an area by:
+#'      upper left coordinates (0-based)
+#'      height
+#'      width
+DefineArea <- function(x, y, w, h) {
+    patchwork::area(t = y + 1,
+                    l = x + 1,
+                    b = y + h,
+                    r = x + w)
+}
+
 
 areas <- c(
-    patchwork::area(t =  1, l =  1, b = 26, r = 26), # A: Circos
-    patchwork::area(t = 22, l =  1, b = 24, r =  4), # circos legends
-    patchwork::area(t = 26, l =  1, b = 26, r =  4), # circos legends
-    patchwork::area(t = 26, l =  6, b = 26, r =  8), # circos legends
-    patchwork::area(t =  1, l = 26, b = 16, r = 39), # B: Pie chart
-    patchwork::area(t =  4, l = 40, b = 14, r = 50), # C: Map
-    patchwork::area(t = 15, l = 27, b = 20, r = 34), # D: Tree
-    patchwork::area(t = 15, l = 35, b = 20, r = 50), # E: Multiple alignment
-    patchwork::area(t = 21, l = 26, b = 26, r = 50)  # F: Repeat data
+    DefineArea(x =  1, y =  0, w = 26, h = 26), # A: Circos
+    DefineArea(x =  0, y = 21, w =  3, h =  3), # circos legends
+    DefineArea(x =  0, y = 25, w =  3, h =  1), # circos legends
+    DefineArea(x =  3, y = 25, w =  3, h =  1), # circos legends
+    DefineArea(x = 24, y =  0, w = 19, h = 19), # B: Pie chart
+    DefineArea(x = 27, y = 18, w = 15, h = 15), # C: Map
+    DefineArea(x =  1, y = 27, w =  6, h =  6), # D: Tree
+    DefineArea(x =  7, y = 27, w = 20, h =  6), # E: Multiple alignment
+    DefineArea(x =  2, y = 33, w = 39, h =  7) # F: Repeat data
 )
 
-
-p <- wrap_elements(full = ~ CircosPlot()) +
+p <- wrap_elements(full = ~ CircosPlot(outer_only = FALSE)) +
     CircosLegend("feat") +
     CircosLegend("svs", direction = "horizontal") +
     CircosLegend("pi_fst") +
@@ -1277,10 +1278,13 @@ p <- wrap_elements(full = ~ CircosPlot()) +
     free(plist$rpt_fam, side = "r") +
     plot_layout(design = areas)
 
-# print(p)
-ggsave(p, file = "figure1.pdf", width = 25, height = 13)
-# ggsave(p, file = "tmp.pdf", width = 25, height = 13)
-# ggsave(p, file = "tmp.pdf", width = 12.5, height = 6.5)
+ggsave(p, file = "figure1.pdf",
+       width = max(areas$r) / 2,
+       height = max(areas$b) / 2)
+
+# ggsave(p, file = "tmp.pdf",
+#        width = max(areas$r) / 2,
+#        height = max(areas$b) / 2)
 ```
 
 ```{r, out.width="100%"}
