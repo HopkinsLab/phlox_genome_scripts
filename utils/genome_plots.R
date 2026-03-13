@@ -572,7 +572,7 @@ FormatR2PvalLab <- function(x, stacked = FALSE, pseudo = FALSE) {
     if (x[2] == 0) {
         pval_str <- str_c("italic(p) < ", FloatAsSci(.Machine$double.eps))
     } else {
-        str_c("italic(p)==", FloatAsSci(x[2]))
+        pval_str <- str_c("italic(p)==", FloatAsSci(x[2]))
     }
 
     if (stacked) {
