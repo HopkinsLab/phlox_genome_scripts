@@ -412,7 +412,10 @@ CircosPlot <- function(outer_only = FALSE) {
 
 CircosLegend <- function(kind = "feat",
                          direction = "vertical",
-                         position = "left") {
+                         position = "left",
+                         text_size = 14,
+                         title_size = 16,
+                         bar_width = unit(1, "in")) {
     require(ggpubr)
     require(ggplot2)
     if (kind == "feat") {
@@ -430,7 +433,8 @@ CircosLegend <- function(kind = "feat",
                                 high = target_dark) +
             guides(fill = guide_colorbar(direction = direction,
                                          position = position)) +
-            theme(legend.title.position = "top")
+            theme(legend.title.position = "top",
+                  legend.key.width = bar_width)
     } else if (kind == "pi_fst") {
         use_col <- Load4SpPal()[names(track_nums)]
         names(use_col) <- c("Nt diversity (P. drum)", "Fst (P. roem vs. P. drum)", "Fst (P. cusp vs. P. drum)")
@@ -444,6 +448,9 @@ CircosLegend <- function(kind = "feat",
                                         position = position))
     }
 
+    p <- p + theme(legend.text = element_text(size = text_size),
+                   legend.title = element_text(size = title_size))
+
     leg <- ggpubr::as_ggplot(ggpubr::get_legend(p))
     leg
 }
@@ -454,13 +461,6 @@ CircosLegend <- function(kind = "feat",
 CircosPlot()
 dev.off()
 ```
-
-And the legend
-```{r circLegendShow, fig.width = 3.5, fig.height = 2}
-CircosLegend()
-dev.off()
-```
-
 
 ### Save circle figure as pdf
 ```{r circSave}
@@ -568,7 +568,17 @@ for (sp in sp_order) {
 
 ### Tree / Phylogeny
 ```{r plotTree}
-p1 <- ggtree(plt_phy, ladderize = FALSE) + geom_tiplab(align = FALSE) +
+tip_data <- data.table(
+    label   = plt_phy$tip.label,
+    species = tolower(substr(plt_phy$tip.label, 1, 1))
+)
+
+tip_colors <- Load4SpPal(for_text = TRUE)
+names(tip_colors) <- substr(names(tip_colors), 1, 1)
+
+p1 <- ggtree(plt_phy, ladderize = FALSE) %<+% tip_data +
+    geom_tiplab(aes(color = species), align = FALSE) +
+    scale_color_manual(values = tip_colors) +
     scale_x_continuous(expand = expansion(c(0, 0.26))) +
     geom_cladelabel(node = 21, label = "", color = sp_colors["pcusp"], barsize = barsize, align = TRUE, offset = clade_offset) +
     geom_cladelabel(node = 16, label = "", color = sp_colors["pdrum"], barsize = barsize, align = TRUE, offset = clade_offset) +
@@ -925,7 +935,7 @@ p <- ggplot(plt_d[SPECIES != "P. pilosa"]) +
                    y = repFamily,
                    fill = RelativeOccupancy),
                shape = 21,
-               size = 3.7) +
+               size = 4.5) +
     scale_fill_gradientn(colors = ryb_pal(100),
                          breaks = log2(leg_breaks),
                          labels = leg_labs,
@@ -1054,15 +1064,18 @@ mapannual <- ggplot(data = world) +
     scale_color_manual(values = use_pal) +
     annotation_scale(location = "bl", width_hint = 0.5,
                      pad_y = unit(0.15, "cm"),
-                     pad_x = unit(0.3, "cm")) +
-    # annotation_north_arrow(location = "bl", which_north = "true", height = unit(1, "cm"), width = unit(0.75, "cm"),
-    #                        pad_x = unit(0.2, "in"), pad_y = unit(0.5, "in"),
-    #                        style = north_arrow_orienteering) +
+                     pad_x = unit(0.3, "cm"),
+                     text_cex = 1) +
+    annotation_north_arrow(location = "br", which_north = "true", height = unit(1, "cm"), width = unit(0.75, "cm"),
+                           pad_x = unit(0.2, "in"), pad_y = unit(0.5, "in"),
+                           style = north_arrow_orienteering) +
     coord_sf(xlim = c(-101.5, -95.5), ylim = c(32.5, 27.5)) +
     annotation_custom(g_hab, xmin = -101.3619, xmax = -94.98436, ymin = 28.24768, ymax = 32.60038) +
     theme_bw(base_size = 18) +
     guides(shape = guide_legend(position = "inside", direction = "vertical"),
-           color = guide_legend(position = "inside", direction = "vertical")) +
+           color = guide_legend(position = "inside",
+                                direction = "vertical",
+                                theme = theme(legend.text = element_text(size = 14, face = "italic")))) +
     theme(axis.title.x = element_blank(),
           legend.position.inside = c(0.18, 0.28),
           legend.background = element_rect(fill = "#FFFFFF88"),
@@ -1245,46 +1258,42 @@ print(plt_d)
 
 # Final Figure 1 plot
 ```{r plotEverything, warning=FALSE, message=FALSE}
-#' Function for defining an area by:
-#'      upper left coordinates (0-based)
-#'      height
-#'      width
-DefineArea <- function(x, y, w, h) {
-    patchwork::area(t = y + 1,
-                    l = x + 1,
-                    b = y + h,
-                    r = x + w)
-}
-
-
 areas <- c(
     DefineArea(x =  1, y =  0, w = 26, h = 26), # A: Circos
     DefineArea(x =  0, y = 21, w =  3, h =  3), # circos legends
     DefineArea(x =  0, y = 25, w =  3, h =  1), # circos legends
     DefineArea(x =  3, y = 25, w =  3, h =  1), # circos legends
     DefineArea(x = 24, y =  0, w = 19, h = 19), # B: Pie chart
-    DefineArea(x = 27, y = 18, w = 15, h = 15), # C: Map
-    DefineArea(x =  1, y = 27, w =  6, h =  6), # D: Tree
-    DefineArea(x =  7, y = 27, w = 20, h =  6), # E: Multiple alignment
+    DefineArea(x = 26, y = 18, w = 15, h = 15), # C: Map
+    DefineArea(x =  1, y = 27, w =  5, h =  6), # D: Tree
+    DefineArea(x =  6, y = 27, w = 20, h =  6), # E: Multiple alignment
     DefineArea(x =  2, y = 33, w = 39, h =  7) # F: Repeat data
 )
 
+p_b <- plist$pie
+p_c <- RedefineFont(plist$map, "axis.text", size = 16)
+p_d <- RedefineFont(plist$tree, "axis.text.x", size = 16)
+p_e <- plist$multi
+
+p_f <- RedefineFont(plist$rpt_fam, "axis.text", size = 16)
+p_f <- RedefineFont(p_f, "axis.title", size = 18)
+p_f <- RedefineFont(p_f, "legend.text", size = 16)
+p_f <- RedefineFont(p_f, "legend.title", size = 18)
+p_f <- RedefineFont(p_f, "strip.text", size = 18)
+
+
 p <- wrap_elements(full = ~ CircosPlot(outer_only = FALSE)) +
     CircosLegend("feat") +
-    CircosLegend("svs", direction = "horizontal") +
+    CircosLegend("svs", direction = "horizontal", bar_width = unit(1, "cm")) +
     CircosLegend("pi_fst") +
-    plist$pie + plist$map +
-    plist$tree + plist$multi +
-    free(plist$rpt_fam, side = "r") +
+    p_b + free(p_c, side = "b") +
+    p_d + p_e +
+    free(p_f, side = "r") +
     plot_layout(design = areas)
 
 ggsave(p, file = "figure1.pdf",
        width = max(areas$r) / 2,
        height = max(areas$b) / 2)
-
-# ggsave(p, file = "tmp.pdf",
-#        width = max(areas$r) / 2,
-#        height = max(areas$b) / 2)
 ```
 
 ```{r, out.width="100%"}

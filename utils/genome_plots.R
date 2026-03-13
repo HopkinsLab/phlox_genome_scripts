@@ -464,13 +464,18 @@ RunNegBinom <- function(dat, xvar, yvar, npoints = 100, level = 0.95,
 
 ### Plot stylings
 
-Load4SpPal <- function(pal = "default") {
+Load4SpPal <- function(pal = "default", for_text = FALSE) {
+    if (for_text) {
+        roem_hex <- "#E2B705"
+    } else {
+        roem_hex <- "#FFCC00"
+    }
     if (pal %in% c("default", "bluedrum")) {
-        out_colors <- sort(c(roem = "#FFCC00", pilo = "#330066", drum = "#7570B3", cusp = "#339966"))
+        out_colors <- sort(c(roem = roem_hex, pilo = "#330066", drum = "#7570B3", cusp = "#339966"))
     } else if (pal %in% c("alternate", "pinkdrum")) {
-        out_colors <- sort(c(roem = "#FFCC00", pilo = "#330066", drum = "#993366", cusp = "#339966"))
+        out_colors <- sort(c(roem = roem_hex, pilo = "#330066", drum = "#993366", cusp = "#339966"))
     } else if (pal %in% c("2drum")) {
-        out_colors <- sort(c(roem = "#FFCC00", pilo = "#330066", drumBlue = "#7570B3", drumPink = "#993366", cusp = "#339966"))
+        out_colors <- sort(c(roem = roem_hex, pilo = "#330066", drumBlue = "#7570B3", drumPink = "#993366", cusp = "#339966"))
     } else {
         stop(str_interp("Palette name ${pal} not recognized"))
     }
@@ -492,6 +497,13 @@ GetPlotLimits <- function(p) {
     x <- layer_scales(p)$x$range$range
     y <- layer_scales(p)$y$range$range
     rbind(x, y)
+}
+
+RedefineFont <- function(p, element, ...) {
+    require(ggplot2)
+    arglist <- list()
+    arglist[[element]] <- element_text(...)
+    p + do.call(theme, arglist)
 }
 
 ### Plotting helper functions
@@ -589,6 +601,18 @@ BrightMatch <- function(x, y) {
 
     rgb(tmp[1], tmp[2], tmp[3])
 }
+
+DefineArea <- function(x, y, w, h) {
+    #' Function for defining a patchwork area by:
+    #'      upper left coordinates (0-based, [x,y])
+    #'      height
+    #'      width
+    patchwork::area(t = y + 1,
+                    l = x + 1,
+                    b = y + h,
+                    r = x + w)
+}
+
 
 # Metadata2PopulationMap <- function(met_d, min_dist=5) {
 #     # Take metadata, identify population centers, and plot
