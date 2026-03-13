@@ -141,7 +141,9 @@ for (nm in names(pca_info)) {
     if (nm == "three") {
         use_col <- Load4SpPal()
         names(use_col) <- ConvertSpeciesNames(names(use_col))
-        p <- p + scale_color_manual(values = use_col)
+        p <- p +
+            scale_color_manual(values = use_col) +
+            guides(color = guide_legend(title = NULL))
     } else {
         p <- p + scale_color_gradient2(
             low = pc1_color_range[1],
@@ -700,7 +702,6 @@ RunAmova <- function(prefix, grp_dat, id_col = "Sample_ID", force = FALSE) {
 
 amova_info <- list()
 for (sp in SpeciesNames()) {
-    # res_dir <- ResDirFromParams("single", sp, min_samp = 0.7, mind = 0.25)
     res_dir <- ResDirFromParams("multi", "cusp_drum_roem", min_samp = 0.7, mind = 0.25)
     tfile_prefix <- str_interp("${res_dir}/pca_impute/populations.snps.lFilt.iFilt.pca.impute.missForest")
 
@@ -887,7 +888,8 @@ print(pixy_info[["dxy_a"]])
 # Row 1
 pPcaAll <- plist$pca$three + theme(legend.position = c(0.8, 0.8), # nolint: object_name_linter.
                                    legend.direction = "vertical",
-                                   legend.text = element_text(face = "italic"))
+                                   legend.text = element_text(face = "italic"),
+                                   legend.background = element_rect(fill = "white", color = "black"))
 pAdmix  <- plist$admix + theme(title = element_blank(), legend.position = "none") # nolint: object_name_linter.
 # pHet    <- plist$het + coord_flip() + theme(axis.title.y = element_blank(), axis.title.x = element_text())
 pAmovaRaw  <- plist$amova$raw + theme(panel.background = element_blank()) # nolint: object_name_linter.
@@ -900,15 +902,15 @@ pAmovaNorm  <- plist$amova$norm + theme(axis.title.y = element_blank(), # nolint
 pPcaDrum <- plist$pca$drum + theme(legend.position = c(0.5, 0.9), legend.direction = "horizontal", legend.text = element_text(size = 8)) # nolint: object_name_linter.
 pEemsMigDrum <- plist$eems$drum$mrates01 + # nolint: object_name_linter.
     annotate("text", x = -Inf, y = Inf, hjust = -0.25, vjust = 1.7, label = ConvertSpeciesNames("drum"),
-             color = Load4SpPal()["drum"], fontface = "italic", size = 4) +
+             color = Load4SpPal()["drum"], fontface = "italic", size = 7) +
     theme(legend.position = c(0.15, 0.7), legend.direction = "vertical") + guides(fill = "none")
 pEemsMigCusp <- plist$eems$cusp$mrates01 + # nolint: object_name_linter.
     annotate("text", x = -Inf, y = Inf, hjust = -0.25, vjust = 1.7, label = ConvertSpeciesNames("cusp"),
-             color = Load4SpPal()["cusp"], fontface = "italic", size = 4) +
+             color = Load4SpPal()["cusp"], fontface = "italic", size = 7) +
     theme(legend.position = "none")
 pEemsMigRoem <- plist$eems$roem$mrates01 + # nolint: object_name_linter.
     annotate("text", x = -Inf, y = Inf, hjust = -0.25, vjust = 1.7, label = ConvertSpeciesNames("roem"),
-             color = Load4SpPal()["roem"], fontface = "italic", size = 4) +
+             color = Load4SpPal(for_text = TRUE)["roem"], fontface = "italic", size = 7) +
     theme(legend.position = "none")
 
 # Row 3
