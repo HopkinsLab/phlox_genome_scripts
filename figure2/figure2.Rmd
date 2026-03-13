@@ -13,7 +13,7 @@ author: Felix L. Wu
 ## Load packages
 
 ```{r loadPkg, message = FALSE}
-source("utils/genome_plots.R")
+source("../utils/genome_plots.R")
 
 # Install packages
 req_pkgs <- c("data.table",
@@ -32,7 +32,7 @@ LoadEEMSplotLib()
 
 ## Theme/font stylings
 ```{r themeSet, message = FALSE}
-SetBaseTheme(base_family = "Arial")
+SetBaseTheme(base_family = "Arial", fontpath = "../utils/fonts/")
 plist <- list()
 # pc1_color_range <- c("#524C98", "#D1A4BB")
 pc1_color_range <- c("#352E80", "#D699B7", "#FFDEEE")
@@ -45,13 +45,6 @@ eems_colors <- c("#994000", "#CC5800", "#FF8F33", "#FFAD66", "#FFCA99", "#FFE6CC
 # > dichromat::dichromat(eems_colors)
 #  [1] "#6B6B27" "#8A8A1F" "#B9B937" "#C9C966" "#DADA98" "#ECECCA" "#E3E3FB"
 #  [8] "#CACAF9" "#B2B2F7" "#9A9AF5" "#8383F2" "#6E6EF1"
-```
-
-## Test
-
-```{r testChunk}
-# Test variables
-tmp_pdf <- "pdfs/tmp.pdf"
 ```
 
 
@@ -232,7 +225,7 @@ plt_d <- admix_info[[k]]
 tmp <- dcast(admix_info[["3"]][, .(IID, pop_infer, value)], IID ~ pop_infer)
 anc_co <- 0.9
 admix_samps <- tmp[((p1 > anc_co) + (p2 > anc_co) + (p3 > anc_co)) != 1, IID]
-admix_annot <- plt_d[IID %in% admix_samps, .(x = as.integer(IID), Y = cumsum(rev(value))[which.min(abs(cumsum(rev(value)) - 0.5))]), by = IID]
+admix_annot <- plt_d[IID %in% admix_samps, .(X = as.integer(IID), Y = cumsum(rev(value))[which.min(abs(cumsum(rev(value)) - 0.5))]), by = IID]
 
 
 x_annot <- which(!duplicated(admix_info[["ord"]]$species))[-1] - 0.5
@@ -288,7 +281,7 @@ for (i in seq_along(x_midpts)) {
     sp <- admix_info[["ord"]][, levels(species)][i]
     p <- p + annotate("text", x = x, y = 0.05, label = ConvertSpeciesNames(sp), hjust = "center", color = "black", fontface = "italic", size = 3)
 }
-# ggsave(p, file = tmp_pdf, width = 8, height = 2)
+# ggsave(p, file = "tmp.pdf", width = 8, height = 2)
 
 plist[["admix"]] <- p
 print(p)
@@ -465,7 +458,7 @@ for (sp in SpeciesNames("short")) {
     setnames(popwise_fst[[sp]], letters[1:3], LETTERS[1:3])
 
     # Remove single individual populations
-    fn <- str_interp("${res_dir}/populations.all.lFilt.iFilt.pop")
+    fn <- str_interp("${res_dir}/fis/populations.all.lFilt.iFilt_fis.txt.pop")
     pop_d <- fread(fn, header = FALSE, col.names = c("IID", "FID"))
     rm_pops <- pop_d[, length(IID) == 1, by = FID][(V1), FID]
     popwise_fst[[sp]] <- popwise_fst[[sp]][!(pop1 %in% rm_pops | pop2 %in% rm_pops)]
@@ -486,7 +479,7 @@ setnames(all_fst, c("lat", "long"), c("lat2", "long2"))
 all_fst[, DIST := haversine(c(lat1, long1), c(lat2, long2)), by = .(pop1, pop2)]
 all_fst[, max_long := max(long1, long2), by = .(pop1, pop2)]
 
-pop_four <- fread("ddRAD_popgen_metadata-populations_RH.Pop_4grp.tsv", header = TRUE)
+pop_four <- fread("drum.pop_categories.4grp.tsv", header = TRUE)
 all_fst <- merge(all_fst, pop_four, by.x = "pop1", by.y = "Population", all.x = TRUE)
 all_fst[is.na(Four_groups), Four_groups := "none"]
 setnames(all_fst, "Four_groups", "Four_groups1")
@@ -544,7 +537,6 @@ for (sp in levels(all_fst$SPECIES)) {
     if (sp == "cusp") {
         all_fst_lm[["cusp_no_668"]] <- RunOLS(all_fst[SPECIES == sp][(pop1 != "668") & (pop2 != "668")], "DIST", "FST")
     }
-
 
     annot_d[[sp]] <- all_fst_lm[[sp]][["fitdat"]]
     annot_d[[sp]][, SPECIES := sp]
@@ -606,8 +598,6 @@ p <- p +
     ylab("Fst") +
     theme_pubr() +
     theme(strip.background = element_blank(), strip.text.x = element_blank())
-
-ggsave(p, file = tmp_pdf, width = 12, height = 4)
 
 # stat_str <- FormatR2PvalLab( unlist(all_fst_lm[["allo_symp"]][c("rsq", "pval")]) )
 #     label_d[[4]] <- data.table(x = -Inf, y = Inf, lab = stat_str, SPECIES = )
@@ -754,7 +744,7 @@ plt_d <- list()
 for (sp in SpeciesNames()) {
     y <- amova_info[[sp]]$varcomp[, 1]
     y <- y / sum(y)
-    plt_d[[sp]] <- data.table(SPECIES = sp, PART = lvls, y = y)
+    plt_d[[sp]] <- data.table(SPECIES = sp, PART = lvls, Y = y)
 }
 
 plt_d <- rbindlist(plt_d)
@@ -781,7 +771,7 @@ names(use_colors) <- ConvertSpeciesNames(names(use_colors))
 plt_d <- list()
 for (sp in SpeciesNames()) {
     y <- sum(amova_info[[sp]]$varcomp[, 1])
-    plt_d[[sp]] <- data.table(SPECIES = sp, y = y)
+    plt_d[[sp]] <- data.table(SPECIES = sp, Y = y)
 }
 
 plt_d <- rbindlist(plt_d)
@@ -814,7 +804,7 @@ p <- ggviolin(all_fis,
               color = "black", fill = "SPECIES",
               add = "median_iqr", add.params = addparams, error.plot = "crossbar") +
     scale_fill_manual(values = Load4SpPal()) #+
-# ggsave(p, file = tmp_pdf)
+# ggsave(p, file = "tmp.pdf")
 print(p)
 ```
 
@@ -830,7 +820,7 @@ for (sp in SpeciesNames("short")) {
     het_info[[sp]][, SPECIES := sp]
 }
 het_info <- rbindlist(het_info)
-setnames(het_info, c("INDV", "O(HOM)", "E(HOM)"), c("IID", "O_HOM", "E_HOM"))
+setnames(het_info, c("INDV", "O(HOM)", "E(HOM)", "F"), c("IID", "O_HOM", "E_HOM", "FSTAT"))
 
 het_info[, SPECIES := factor(SPECIES, levels = c("roem", "drum", "cusp"))]
 ```
@@ -844,9 +834,9 @@ plt_d <- het_info[!(IID %in% rm_samps)]
 
 detect_outliers <- FALSE
 if (detect_outliers) {
-    p <- ggboxplot(plt_d, x = "SPECIES", y = "Fstat", fill = "SPECIES", alpha = 0.7)
+    p <- ggboxplot(plt_d, x = "SPECIES", y = "FSTAT", fill = "SPECIES", alpha = 0.7)
 } else {
-    plt_d <- plt_d[, as.list(quantile(Fstat, (0:4) / 4)), by = SPECIES]
+    plt_d <- plt_d[, as.list(quantile(FSTAT, (0:4) / 4)), by = SPECIES]
     setnames(plt_d,
         str_c((0:4) /  4 * 100, "%"),
         c("MIN", "Q1", "MED", "Q3", "MAX")
@@ -860,7 +850,7 @@ p <- p + scale_fill_manual(name = "species", values = Load4SpPal()) +
           axis.title.x = element_blank())
 plist[["het"]] <- p
 print(p)
-# ggsave(p, file = tmp_pdf, width = 3.5, height = 4)
+# ggsave(p, file = "tmp.pdf", width = 3.5, height = 4)
 ```
 
 
