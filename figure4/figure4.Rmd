@@ -1,0 +1,630 @@
+---
+title: "Figure 4 Dstat"
+date: "2025-05-12"
+output:
+    html_document:
+        toc: true
+        toc_float: true
+author: Felix L. Wu
+---
+
+# Setup
+
+## Load packages
+
+```{r loadPkg, message = FALSE}
+source("utils/genome_plots.R")
+
+# Install packages
+req_pkgs <- c("data.table", "stringr", "ggpubr", "viridis", "patchwork", "extrafont", "RColorBrewer")
+LoadPackages(req_pkgs)
+```
+
+## Theme/font stylings
+```{r themeSet, message = FALSE}
+SetBaseTheme(base_family = "Arial")
+plist <- list()
+```
+
+## Sample data
+```{r getSamples}
+pop_d <- fread("sample_lists/foursp.pop", header = FALSE, col.names = c("ID_LONG", "POP"))
+pop_d[, ID_MED := str_remove(ID_LONG, ".*_Hopkins_")]
+pop_d[, ID_SHORT := str_remove(str_remove(ID_MED, "_.*"), "-.*")]
+setkey(pop_d, ID_LONG)
+```
+
+## Functions and settings
+```{r funcs}
+ShortenID <- function(x, newid = "ID_SHORT") {
+    stopifnot(newid %in% names(pop_d))
+    return(pop_d[x][[newid]])
+}
+```
+
+```{r globals}
+vartypes <- c("SNP", "SV")
+```
+
+# D-statistic
+
+## Load data
+
+```{r loadDstat}
+dstat_info <- list()
+dstat_info[["DP"]] <- 5
+dstat_info[["SVLEN"]] <- 500
+dstat_info[["wsize"]] <- "250kb"
+
+dstat_info[["w"]] <- list()
+for (i in 1:5) {
+    v <- "SNP"
+    for (chunk in 1:16) {
+        cmd <- str_interp("grep -v '^#' results/mpileup/snp_patt/dp_${dstat_info$DP}/rep${i}/merged.chunk${chunk}.mpileup.rep${i}.DP_${dstat_info$DP}.snp_patt_counts.w_${dstat_info$wsize}.tsv")
+        cat(cmd, "\n", sep = "")
+        dstat_info[["w"]][[cmd]] <- fread(cmd = cmd, header = TRUE, sep = "\t")
+        dstat_info[["w"]][[cmd]][, REP := i]
+        dstat_info[["w"]][[cmd]][, VARTYPE := v]
+        dstat_info[["w"]][[cmd]][, CHROM := as.character(CHROM)]
+    }
+
+    v <- "SV"
+    for (chrom in 1:7) {
+        cmd <- str_interp("grep -v '^#' results/SVs/snp_patt/SVLEN_${dstat_info$SVLEN}/rep${i}/SV_vsPilo_FINAL_SURVMERGE.chr${chrom}.rep${i}.SVLEN_${dstat_info$SVLEN}.sv_patt_counts.w_${dstat_info$wsize}.tsv")
+        cat(cmd, "\n", sep = "")
+        dstat_info[["w"]][[cmd]] <- fread(cmd = cmd, header = TRUE, sep = "\t")
+        dstat_info[["w"]][[cmd]][, REP := i]
+        dstat_info[["w"]][[cmd]][, VARTYPE := v]
+        dstat_info[["w"]][[cmd]][, CHROM := str_remove(str_remove(CHROM, "_RagTag$"), "^chrlg")]
+    }
+}
+
+dstat_info[["w"]] <- rbindlist(dstat_info[["w"]])
+dstat_info[["w"]][, CHROM := factor(CHROM, levels = as.character(1:7))]
+dstat_info[["all"]] <- dstat_info[["w"]][,
+                        .(N_SNPS = sum(N_SNPS), BBAA = sum(BBAA), ABBA = sum(ABBA), BABA = sum(BABA)),
+                        by = .(ID1, ID2, ID3, REP, VARTYPE)]
+```
+
+Compute D
+
+```{r calcDstatSnp}
+dstat_info$w[, DSTAT := sum(ABBA - BABA) / sum(ABBA + BABA), by = .(CHROM, START, END, ID1, ID2, ID3, REP, VARTYPE)]
+dstat_info$all[, DSTAT := sum(ABBA - BABA) / sum(ABBA + BABA), by = .(ID1, ID2, ID3, REP, VARTYPE)]
+```
+
+
+Get missingness data
+
+```{r getMissingness}
+tmp <- list()
+for(i in 1:5){
+    tmp[[i]] <- list()
+    for(chunk in 1:16){
+        fn <- str_interp("results/missingness/merged.chunk${chunk}.mpileup.rep${i}.DP_${dstat_info$DP}.missingness.tsv")
+        tmp[[i]][[chunk]] <- fread(fn, header=TRUE)
+    }
+    tmp[[i]] <- rbindlist(tmp[[i]])
+
+    # Some windows span multiple chunks so sum those
+    tmp[[i]][, CHROM := str_remove(str_remove(CHROM, "_RagTag$"), "^chrlg")]
+    tmp[[i]][, ID := str_c(CHROM, "_", START)]
+    tmp[[i]][, DUPE := duplicated(ID)]
+    for(dup_x in tmp[[i]][, which(DUPE)]){
+        dup_id <- tmp[[i]][dup_x, ID]
+        ori_i <- tmp[[i]][, which(ID == dup_id & !DUPE)[1]]
+        for(cn in str_subset(names(tmp[[i]]), "^MISSING")){
+            x <- tmp[[i]][dup_x, get(cn)]
+            tmp[[i]][ori_i, eval(cn) := get(cn) + x]
+        }
+    }
+    tmp[[i]] <- tmp[[i]][!(DUPE)]
+    tmp[[i]][, DUPE := NULL]
+    tmp[[i]][, ID   := NULL]
+    tmp[[i]][, REP  := i]
+    tmp[[i]][, CHROM := factor(CHROM, levels = as.character(1:7))]
+}
+
+dstat_info[["miss"]] <- rbindlist(tmp)
+rm(tmp)
+
+# Get proportion for each window
+j <- which(str_starts(names(dstat_info$miss), "MISSING"))
+m <- as.matrix(dstat_info$miss[, ..j])
+newvals <- rowSums(sweep(m, 2, 0:nrow(pop_d), `*`)) / (12 * rowSums(m))
+dstat_info$miss[, MISSINGPROP := newvals]
+```
+
+
+## Plot
+
+### Missingness across samples
+```{r plotMissingDensity, fig.width = 5, fig.height = 4}
+plt_d <- dstat_info$miss[, QuantileOverReplicates(MISSINGPROP, prefixes = "MISSINGPROP"), by=.(CHROM, START, END)]
+
+p <- ggdensity(plt_d, x="MISSINGPROP_med", fill="grey",
+               xlab = "Proportion missing GTs")
+print(p)
+```
+
+### Summing across all windows
+```{r plotDstatAll, fig.width = 5, fig.height = 4}
+for (v in vartypes) {
+    pts_d <- dstat_info$all[VARTYPE == v, QuantileOverReplicates(DSTAT, prefixes = "DSTAT"), by = .(ID1, ID2, ID3)]
+    lines_d <- dstat_info$all[VARTYPE == v, .(MIN = min(DSTAT), MAX = max(DSTAT)), by = .(ID1, ID2)]
+
+    use_ylim <- c(-1, 1) * lines_d[, max(abs(c(range(MAX), range(MIN))))]
+
+    for (i in str_c("ID", 1:2)) {
+        pts_d[, eval(i) := ShortenID(get(i))]
+        lines_d[, eval(i) := ShortenID(get(i))]
+    }
+
+    pts_d[, REGION := "Allopatry"]
+    pts_d[str_starts(ID2, "6"), REGION := "Sympatry"]
+
+    lines_d[, REGION := "Allopatry"]
+    lines_d[str_starts(ID2, "6"), REGION := "Sympatry"]
+
+    dodge_w <- 0.8
+
+    # use_shapes <- c(0, 1, 2, 5)
+    # names(use_shapes) <- unique(pts_d$ID2)
+
+    use_colors <- Load4SpPal("2drum")[c("drumBlue", "drumPink")]
+    names(use_colors) <- c("Allopatry", "Sympatry")
+    # use_colors <- tmp[c(1,1,2,2)]
+    # names(use_colors) <- c(str_subset(unique(pts_d$ID2), "^6"), str_subset(unique(pts_d$ID2), "^7"))
+
+    p <- ggplot() +
+        geom_linerange(aes(x = ID2, ymin = MIN, ymax = MAX, color = REGION), data = lines_d,
+                        alpha = 0.4, linewidth = 10) +
+        geom_linerange(aes(x = ID2, ymin = DSTAT_lwr, ymax = DSTAT_upr, color = REGION), data = pts_d,
+                        position = position_dodge2(width = dodge_w)) +
+        geom_point(aes(x = ID2, y = DSTAT_med, color = REGION), data = pts_d,
+                        position = position_dodge2(width = dodge_w), shape = 1) +
+        geom_hline(yintercept = 0, linetype = 2) +
+        facet_wrap(vars(ID1), nrow = 1) +
+        scale_color_manual(values = use_colors, name = "P. drummondii region") +
+        ylim(use_ylim) +
+        xlab("P. drummondii individual") +
+        ylab("D-statistic") +
+        theme_pubr() +
+        theme(
+            axis.text.x = element_text(angle = 30, hjust = 1, size = 8),
+            strip.background = element_rect(fill = Load4SpPal()["roem"]))
+    print(p)
+
+    plist[[v]] <- p
+    # ggsave(p, filename = "tmp.pdf", width = 5, height = 4)
+}
+```
+
+### Correlation between Dstat and missingness
+
+```{r corrMissDstat, fig.width = 8, fig.height = 8}
+plt_d <- dstat_info$w[VARTYPE == "SNP", .(DSTAT=median(DSTAT)), by = .(ID1, ID2, CHROM, START)]
+miss_d <- dstat_info$miss[, QuantileOverReplicates(MISSINGPROP, prefixes = "MISSINGPROP"), by=.(CHROM, START)]
+plt_d <- merge(plt_d, miss_d, by=c("CHROM", "START")); rm(miss_d)
+
+
+p <- ggplot(plt_d, aes(x=MISSINGPROP_med, y=DSTAT)) + geom_bin2d() + 
+    scale_fill_viridis() +
+    facet_grid(ID1 ~ ID2) +
+    xlab("Proportion missing GTs") +
+    ylab("Median D") +
+    theme_pubr()
+
+print(p)
+# ggsave(p, file="tmp.pdf")
+```
+
+# Windowed D-statistic
+
+Are there any shared windows across *all* quartets?
+
+Plan, plot chr1 for a few quartets to show top-scoring D windows (250 kb)
+
+(In the future, explore anti-correlated windows?)
+
+We ignore windows with fewer than 1000 informative snps and with more than 50% missing genotypes
+
+
+```{r dwindowIntersect}
+min_inform_snps <- 1000
+max_missingness <- 0.5
+
+tmp <- dstat_info$miss[, QuantileOverReplicates(MISSINGPROP, prefixes = "MISSINGPROP"), by=.(CHROM, START)][
+                       MISSINGPROP_med < max_missingness]
+wnames <- tmp[, str_c(CHROM, "_", START)]
+
+dat <- dstat_info$w[str_c(CHROM, "_", START) %in% wnames][
+                    VARTYPE == "SNP"][
+                    (BBAA + ABBA + BABA) > min_inform_snps][, 
+                    QuantileOverReplicates(DSTAT, BBAA, ABBA, BABA, prefixes = c("DSTAT", "BBAA", "ABBA", "BABA")), 
+                    by = .(CHROM, START, END, ID1, ID2, ID3)]
+
+
+dat <- merge(dat, tmp, by=c("CHROM", "START"))
+dat[, WINDOW := str_c(CHROM, "_", START)]
+
+all_trios <- dat[, 1, by = .(ID1, ID2, ID3)]
+all_trios[, V1 := NULL]
+setorder(all_trios, ID1, ID2, ID3)
+sd_cutoff <- 3
+
+outlier_windows <- list()
+for (sp in c("drum", "roem")) {
+    outlier_windows[[sp]] <- list()
+    for (i in 1:nrow(all_trios)) {
+        ids <- all_trios[i, c(ID1, ID2, ID3)]
+        if (sp == "drum") {
+            outlier_windows[[sp]][[i]] <- dat[ID1 == ids[1]][ID2 == ids[2]][ID3 == ids[3]][as.vector(scale(DSTAT_med)) > sd_cutoff, WINDOW]
+        } else {
+            outlier_windows[[sp]][[i]] <- dat[ID1 == ids[1]][ID2 == ids[2]][ID3 == ids[3]][as.vector(scale(DSTAT_med)) < -sd_cutoff, WINDOW]
+        }
+    }
+}
+```
+
+### Outlier windows shared across all comparisons
+```{r outlierShared}
+intersect_outliers <- list()
+for (sp in names(outlier_windows)) {
+    count_tab <- as.data.table(table(unlist(outlier_windows[[sp]])))
+    setnames(count_tab, c("V1", "N"), c("WINDOW", "COUNT"))
+    out_d <- dat[WINDOW %in% count_tab[["WINDOW"]], .(CHROM = CHROM[1], 
+                                                      START = START[1], 
+                                                      END = END[1], 
+                                                      MISSINGPROP = MISSINGPROP_med[1]), by = WINDOW]
+    out_d <- merge(out_d, count_tab, by="WINDOW")
+    out_d[, WINDOW := NULL]
+    setorderv(out_d, c("COUNT", "CHROM", "START"), order=c(-1, 1, 1))
+    print(head(out_d))
+    
+    intersect_outliers[[sp]] <- out_d
+    out_fn <- str_interp("results_tar/outlier_windows.shared.${sp}.bed")
+    fwrite(out_d, file = out_fn, col.names = FALSE, row.names = FALSE, quote = FALSE, sep = "\t")
+}
+```
+
+### All pairwise comparisons
+
+Compute all pairwise comparisons of distinct trios and the number of matching outlier windows
+
+First let's get all the distinct pairs of trios that don't include any samples in common
+
+```{r pwiseOutlierOverlap1}
+all_pairs <- t(combn(1:nrow(all_trios), m = 2))
+mask <- apply(all_pairs, 1, function(x) length(unique(unlist(all_trios[x]))) == 6)
+uniq_pairs <- all_pairs[mask, ]
+```
+
+Next, compute number of overlaps in each pairwise comparison
+```{r pwiseOutlierOverlap2}
+overlap_d <- list()
+for (sp in names(outlier_windows)) {
+    overlap_d[[sp]] <- data.table(TRIO_A = uniq_pairs[, 1], TRIO_B = uniq_pairs[, 2], DIRECTION = sp)
+    for (i in 1:nrow(uniq_pairs)) {
+        trio_idx <- uniq_pairs[i, ]
+        wA <- outlier_windows[[sp]][[trio_idx[1]]]
+        wB <- outlier_windows[[sp]][[trio_idx[2]]]
+        overlap_d[[sp]][i, N_OUTLIER_A := length(wA)]
+        overlap_d[[sp]][i, N_OUTLIER_B := length(wB)]
+        overlap_d[[sp]][i, N_OUTLIER_I := length(intersect(wA, wB))]
+        overlap_d[[sp]][i, N_OUTLIER_U := length(union(wA, wB))]
+    }
+}
+overlap_d <- rbindlist(overlap_d)
+```
+
+Plot overlap distribution
+
+```{r pwiseOutlierOverlapPlot, fig.width = 5, fig.height = 4}
+overlap_d[, FILL := str_c("cusp <=> ", DIRECTION)]
+use_colors <- Load4SpPal()[c("drum", "roem")]
+names(use_colors) <- str_c("cusp <=> ", names(use_colors))
+
+p1 <- ggdensity(overlap_d, x = "N_OUTLIER_I", fill = "FILL") +
+    scale_fill_manual(guide = "none", values = use_colors) +
+    xlab("Number of overlapping outlier windows")
+
+p2 <- ggboxplot(overlap_d, x = "FILL", y = "N_OUTLIER_I", fill = "FILL", orientation = "horizontal") +
+    scale_fill_manual(name = "Introgression direction", values = use_colors) +
+    theme(
+        axis.title = element_blank(),
+        axis.line = element_blank(),
+        axis.text.x = element_blank(),
+        axis.text.y = element_blank(),
+        axis.ticks = element_blank()
+    )
+
+p <- p2 / p1 + plot_layout(heights = c(1,4))
+print(p)
+# ggsave(p, file = "tmp.pdf", width = 5, height = 4)
+```
+
+### Windows with Outliers (chr1)
+```{r plotWindowsWithOutliers, fig.width = 12, fig.height = 3}
+compare_trios <- c(19, 37)
+tileheight <- 0.85
+
+plt_d <- list()
+for (i in compare_trios) {
+    samps <- unlist(all_trios[i])
+    lab <- str_c(c("R", "D", "C"), ShortenID(samps), collapse = ",")
+    plt_d[[lab]] <- dat[ID1 == samps[1] & ID2 == samps[2] & ID3 == samps[3]][CHROM == "1"]
+    plt_d[[lab]][, LABEL := lab]
+    plt_d[[lab]][, OUTLIER := WINDOW %in% c(outlier_windows$drum[[i]], outlier_windows$roem[[i]])]
+}
+plt_d <- rbindlist(plt_d)
+plt_d[, COORD := START / 1e6]
+plt_d[, LABEL := factor(LABEL)]
+
+annot_d <- plt_d[(OUTLIER)]
+annot_d[, SHAPE := as.integer(LABEL)]
+int_w <- intersect(annot_d[SHAPE == 1, WINDOW], annot_d[SHAPE == 2, WINDOW])
+annot_d[WINDOW %in% int_w, SHAPE := 3L]
+annot_d[, SHAPE := as.character(SHAPE)]
+annot_d[, COLOR := as.character(sign(DSTAT_med))]
+annot_d[SHAPE == 1, Y := 1 - (tileheight / 2) * 1.1]
+annot_d[SHAPE == 2, Y := 2 + (tileheight / 2) * 1.1]
+annot_d[SHAPE == 3, Y := 1.5]
+
+tilewidth <- plt_d[1:2, diff(COORD)]
+
+dmax <- plt_d[, max(abs(range(DSTAT_med)))]
+
+use_gradient <- brewer.pal(11, "RdYlBu")
+use_colors <- use_gradient[c(1,11)]
+names(use_colors) <- c("-1", "1")
+
+
+# use_shapes <- c(25, 24, 23)
+use_shapes <- c(2, 6, 18)
+names(use_shapes) <- as.character(1:3)
+
+use_sizes <- c(1, 1, 2) * 1.4
+names(use_sizes) <- names(use_shapes)
+
+limits <- list("x" = c(-1, max(plt_d$COORD) + 1),
+               "y" = range(annot_d$Y) + c(-0.1, 0.1))
+
+p <- ggplot() +
+    geom_tile(aes(x = COORD, y = LABEL, fill = DSTAT_med), data = plt_d, width = tilewidth, height = tileheight) +
+    scale_fill_gradientn(colors = use_gradient, limits = c(-dmax, dmax), name = "D-statistic") +
+    geom_point(aes(x = COORD, y = Y, color = COLOR, shape = SHAPE, size = SHAPE), data = annot_d) +
+    scale_color_manual(values = use_colors, guide = "none") +
+    scale_shape_manual(values = use_shapes, guide = "none") +
+    scale_size_manual(values = use_sizes, guide = "none") +
+    xlab("Chr1 Position (Mb)") +
+    coord_cartesian(xlim = limits$x, ylim = limits$y, expand = FALSE) +
+    theme_pubr() +
+    theme(
+        axis.title.y = element_blank(),
+        axis.line.y = element_blank())
+print(p)
+ggsave(p, file = "tmp.pdf", width = 12, height = 3)
+
+plist[["tile"]] <- p
+```
+
+### Compute likelihood of overlap w/ bootstrap
+```{r bootstrapOverlap, fig.width = 4, fig.height = 3}
+tmp_d <- list()
+for (i in compare_trios) {
+    nm <- as.character(i)
+    samps <- unlist(all_trios[i])
+    tmp_d[[nm]] <- dat[ID1 == samps[1] & ID2 == samps[2] & ID3 == samps[3]]
+
+    tmp_d[[nm]][, INDEX := i]
+    tmp_d[[nm]][, OUTLIER := "."]
+    for (sp in c("drum", "roem")) {
+        tmp_d[[nm]][WINDOW %in% outlier_windows[[sp]][[i]], OUTLIER := sp]
+    }
+}
+tmp_d <- rbindlist(tmp_d)
+
+tab <- tmp_d[, table(WINDOW)]
+joint_w <- names(tab)[tab == 2]
+tmp_d <- tmp_d[WINDOW %in% joint_w]
+nwindows <- tmp_d[, .N / 2]
+boot_params <- tmp_d[, as.list(table(OUTLIER)), by = INDEX][, .(drum, roem)]
+
+noverlap <- tmp_d[OUTLIER != ".", sum(table(WINDOW) == 2), by = .(OUTLIER)][, sum(V1)]
+
+BootstrapWindowOverlap <- function(nwindows, outlier1, outlier2, noverlap, nboot = 5000) {
+    SampleFunc <- function() {
+        samp1 <- sample.int(nwindows, size = sum(outlier1), replace = FALSE)
+        samp2 <- sample.int(nwindows, size = sum(outlier2), replace = FALSE)
+
+        noverlap <- sum(samp1[1:outlier1[1]] %in% samp2[1:outlier2[1]]) +
+                    sum(samp1[-(1:outlier1[1])] %in% samp2[-(1:outlier2[1])])
+
+        return(noverlap)
+    }
+
+    boot_replicates <- replicate(SampleFunc(), n = nboot)
+    pval <- sum(boot_replicates > noverlap) / nboot
+    return(list("replicates" = boot_replicates, "pval" = pval))
+}
+
+boot_res <- BootstrapWindowOverlap(nwindows, unlist(boot_params[1, ]), unlist(boot_params[2, ]), noverlap)
+
+plt_d <- data.table(X = boot_res$replicates)
+
+p <- gghistogram(plt_d, x = "X", fill = "#333333", color = NA, binwidth = 1) +
+    geom_vline(xintercept = noverlap, color = "red") +
+    xlab("Overlapping\noutlier windows")
+print(p)
+
+plist[["boot"]] <- p
+```
+
+### Joint plot (windows + bootstrap)
+
+```{r plotJoint, fig.width = 14, fig.height = 3}
+p <- plist$tile + plist$boot + plot_layout(widths = c(12, 2))
+print(p)
+ggsave(p, file = "tmp.pdf", width = 14, height = 3)
+```
+
+### SNP + SV window correlation
+
+#### Calculate variant correlation
+```{r calcVarCorrelation}
+pts_d <- list()
+for (v in vartypes) {
+    pts_d[[v]] <- dstat_info$all[VARTYPE == v, QuantileOverReplicates(DSTAT, prefixes = v), by = .(ID1, ID2, ID3)]
+}
+pts_d <- merge(pts_d[[1]], pts_d[[2]], by = c("ID1", "ID2", "ID3"))
+
+xvar <- "SNP_med"
+yvar <- "SV_med"
+
+ols_res <- RunOLS(pts_d, xvar = xvar, yvar = yvar)
+print(summary(ols_res$model))
+```
+
+```{r plotVarCorrelation, fig.height = 4, fig.width = 4}
+
+use_lab <- FormatR2PvalLab(unlist(ols_res[c("rsq", "pval")]))
+
+p <- ggscatter(pts_d, x = xvar, y = yvar) +
+    geom_ribbon(aes(x = .data[[xvar]], y = .data[[yvar]], ymin = LWR, ymax = UPR), data = ols_res$fitdat, fill = "#333333", alpha = 0.3) +
+    geom_line(aes(x = .data[[xvar]], y = .data[[yvar]]), data = ols_res$fitdat, color = "blue") +
+    geom_hline(yintercept = 0, linetype = 2) +
+    geom_vline(xintercept = 0, linetype = 2) +
+    annotate(geom = "text", x = -Inf, y = Inf, hjust = -0.1, vjust = 1.8, label = use_lab, parse = TRUE) +
+    xlab("D-statistic (SNP)") +
+    ylab("D-statistic (SV)")
+print(p)
+plist[["SV_SNP_corr"]] <- p
+# ggsave(p, file = "tmp.pdf", width = 4, height = 4)
+```
+
+### Testing ...
+
+```{r plotDstatTesting}
+trios <- list()
+cusp_ind <- pop_d[POP=="cusp", ID_LONG][3]
+trios[[1]] <- c("proe_Hopkins_702-2-3-1", "pdrum_Hopkins_656a",      cusp_ind)
+trios[[2]] <- c("proe_Hopkins_708_36_1",  "pdrum_Hopkins_706b-21-c", cusp_ind)
+
+sub_d <- list()
+for (i in 1:2) {
+    sub_d[[i]] <- dstat_info$w[VARTYPE == "SNP"][((ID1 == trios[[i]][1]) & (ID2 == trios[[i]][2]) & (ID3 == trios[[i]][3]))][(BBAA + ABBA + BABA) > 400][,
+        QuantileOverReplicates(DSTAT, prefixes = "DSTAT"), by = .(CHROM, START, END)]
+}
+
+plt_d <- merge(sub_d[[1]], sub_d[[2]], by = c("CHROM", "START", "END"), suffixes = c("_X", "_Y"))
+
+lm_model <- lm(DSTAT_med_Y ~ DSTAT_med_X, data = plt_d)
+
+OrthoDist <- function(m, xvar, yvar) {
+    line_params <- c(coef(m)[2], -1, coef(m)[1])
+    x <- m$model[, xvar]
+    y <- m$model[, yvar]
+
+    out_vals <- sign(lm_model$residuals) * abs(line_params[1] * x + line_params[2] * y + line_params[3]) / sqrt(sum(line_params[1:2]^2))
+    return(out_vals)
+}
+
+plt_d[, ORTHODIST := OrthoDist(lm_model, "DSTAT_med_X", "DSTAT_med_Y")]
+
+plt_d[, EXTREME := as.vector(abs(scale(ORTHODIST))) > 5]
+
+p <- ggscatter(plt_d, x = "DSTAT_med_X", y = "DSTAT_med_Y", color = "EXTREME", alpha = 0.3) +
+    geom_vline(xintercept = 0, linetype = 2) +
+    geom_hline(yintercept = 0, linetype = 2) +
+    geom_abline(intercept = 0, slope = 1, color = "gray", linetype = 2)
+print(p)
+dev.off()
+
+#     CHROM     START       END  DSTAT_lwr_X  DSTAT_med_X  DSTAT_upr_X  DSTAT_lwr_Y  DSTAT_med_Y  DSTAT_upr_Y
+#    <fctr>     <int>     <int>        <num>        <num>        <num>        <num>        <num>        <num>
+# 1:      1 834000000 834250000   -0.4828023   -0.4364090   -0.4094112    0.4696562    0.4930876    0.5277855
+# 2:      2 375000000 375250000   -0.5501294   -0.5196305   -0.4942731    0.3963303    0.4171123    0.4358673
+# 3:      4  70750000  71000000   -0.5266384   -0.5015823   -0.4951383    0.4617709    0.4768683    0.4970593
+
+
+# foo <- dstat_info$w[VARTYPE=="SNP"][CHROM == "1" & START == 834000000][, QuantileOverReplicates(DSTAT), by = .(ID1, ID2, ID3)]
+# ggdensity(foo, x = "MED", fill = "ID1", color = "ID2")
+# dev.off()
+
+
+
+
+```
+
+# Figure 4 full plot
+
+```{r fullPlot, fig.width = 12, fig.height = 11.93651}
+dadi_dim <- c(557, 365)
+
+scatter_w <- 199
+w <- dadi_dim[1] + scatter_w
+tile_w <- w * 12/14
+
+row_h <- cumsum(c(w/3, dadi_dim[2], w/14 * 2.5))
+
+print(row_h[length(row_h)] / w * 12)
+
+# top left bottom right
+layout <- c(
+    area(1, 1,     row_h[1], w/2), # R1
+    area(1, w/2+1, row_h[1], w),
+
+    area(row_h[1]+1, 1, row_h[2], scatter_w), # R2
+    # area(row_h[1]+1, scatter_w+1, row_h[2], w),
+
+    area(row_h[2]+1, 1, row_h[3], tile_w), # R3
+    area(row_h[2]+1, tile_w+1, row_h[3], w)
+)
+
+pSNP <- plist$SNP
+pSV <- plist$SV + theme(legend.position = "none")
+pCorr <- plist$SV_SNP_corr
+pTile <- plist$tile
+pBoot <- plist$boot
+
+p <- free(pSNP, side = "l") + pSV + free(pCorr, side = "l") + pTile + pBoot + plot_layout(design = layout)
+
+ggsave(p, file = "figure4.pdf", width = 12, height = 11.93651)
+# ggsave(p, file = "tmp.pdf", width = 12, height = 12.36508)
+# ggsave(p, file = "tmp.pdf", width = 14, height = 14.42593)
+print(p)
+```
+
+# Random non-outlier windows
+
+To provide a fair comparison against the outlier windows use randomly sampled non-outlier windows. 
+We apply a 25% quantile cutoff on the median BBAA count and also require that the window pass this threshold
+in all 48 trios.
+
+```{r sampleNonOutlier}
+set.seed(3027)
+
+bbaa_thresh <- quantile(dat$BBAA_med, 0.25)
+print(bbaa_thresh)
+
+nsamp <- 100
+
+ignore_w <- union(unlist(outlier_windows$drum), unlist(outlier_windows$roem)) # Ignore outlier windows
+w_pool <- dat[!(WINDOW %in% ignore_w)][BBAA_med > bbaa_thresh, .N == nrow(all_trios), by = WINDOW][(V1), WINDOW]
+samp_windows <- sample(w_pool, size = nsamp, replace = FALSE)
+
+out_d <- dat[WINDOW %in% samp_windows, .(CHROM[1], START[1], END[1], MISSINGPROP_med[1]), by = WINDOW]
+out_d[, WINDOW := factor(WINDOW, levels=samp_windows)] # Order by sample
+setorder(out_d, WINDOW)
+out_d[, WINDOW := NULL]
+
+out_fn <- str_interp("results_tar/samp_windows.bed")
+fwrite(out_d, file = out_fn, col.names = FALSE, row.names = FALSE, quote = FALSE, sep = "\t")
+```
+
+# Save for debugging
+```{r saveData}
+save.image("results/figure4.dstat.RData")
+# load("results/figure4.dstat.RData")
+```
