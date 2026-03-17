@@ -60,7 +60,7 @@ dstat_info[["w"]] <- list()
 for (i in 1:5) {
     v <- "SNP"
     for (chunk in 1:16) {
-        cmd <- str_interp("grep -v '^#' results/mpileup/snp_patt/dp_${dstat_info$DP}/rep${i}/merged.chunk${chunk}.mpileup.rep${i}.DP_${dstat_info$DP}.snp_patt_counts.w_${dstat_info$wsize}.tsv")
+        cmd <- str_interp("grep -v '^#' results/snp_patt/merged.chunk${chunk}.mpileup.rep${i}.DP_${dstat_info$DP}.snp_patt_counts.w_${dstat_info$wsize}.tsv")
         cat(cmd, "\n", sep = "")
         dstat_info[["w"]][[cmd]] <- fread(cmd = cmd, header = TRUE, sep = "\t")
         dstat_info[["w"]][[cmd]][, REP := i]
@@ -101,7 +101,7 @@ tmp <- list()
 for (i in 1:5) {
     tmp[[i]] <- list()
     for (chunk in 1:16) {
-        fn <- str_interp("results/missingness/merged.chunk${chunk}.mpileup.rep${i}.DP_${dstat_info$DP}.missingness.tsv")
+        fn <- str_interp("results/missingness/merged.chunk${chunk}.mpileup.rep${i}.DP_${dstat_info$DP}.missingness.w_${dstat_info$wsize}.tsv")
         tmp[[i]][[chunk]] <- fread(fn, header = TRUE)
     }
     tmp[[i]] <- rbindlist(tmp[[i]])
