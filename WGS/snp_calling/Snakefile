@@ -1,0 +1,38 @@
+#####################
+# Snakefile scaffold
+#####################
+
+SAMPLES = [
+    "pcusp_Hopkins_652_12", "pcusp_Hopkins_761c_48_1", "pcusp_Hopkins_798c", "pcusp_Hopkins_801_19_2", 
+    "pdrum_Hopkins_656a", "pdrum_Hopkins_680", "pdrum_Hopkins_706b-21-c", "pdrum_Hopkins_785", 
+    "proe_Hopkins_702-2-3-1", "proe_Hopkins_708_36_1", "proe_Hopkins_728_06_1", 
+    "ppilo_Hopkins_1704"
+]
+REF_FASTA = "ref/pilo.v1.0.ncbi.fasta"
+CHUNK_DIR = "windows"
+CHUNK_PREFIX = "pilo.v1.0.ncbi.split_300Mb"
+CHUNKS   = range(1, 26)
+REP      = range(1, 6)
+MIN_DP   = [5, 10]
+BAM_DIR  = "path/to/bams"
+
+################################################
+
+rule all:
+    input:
+        expand(
+            "results/mpileup/sampled_genotypes/filtered/chunk{chunk}/{samp}.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.vcf.gz",
+            samp=SAMPLES,
+            chunk=CHUNKS,
+            repi=REP,
+            min_dp=MIN_DP,
+        ),
+        expand(
+            "results/mpileup/sampled_genotypes/filtered/chunk{chunk}/{samp}.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.vcf.gz.csi",
+            samp=SAMPLES,
+            chunk=CHUNKS,
+            repi=REP,
+            min_dp=MIN_DP,
+        )
+
+include: "workflow/rules/calling.smk"
