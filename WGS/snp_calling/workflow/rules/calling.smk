@@ -2,8 +2,8 @@ rule mpileup:
     input:
         bam = lambda wildcards: f"{BAM_DIR}/{wildcards.samp}.vs_phlox_pilo.v1.bam"
     output:
-        vcf = "results/pileups/{samp}/{samp}.chunk{chunk}.mpileup.vcf.gz",
-        idx = "results/pileups/{samp}/{samp}.chunk{chunk}.mpileup.vcf.gz.csi"
+        vcf = "results/pileups/{samp}.chunk{chunk}.mpileup.vcf.gz",
+        idx = "results/pileups/{samp}.chunk{chunk}.mpileup.vcf.gz.csi"
     resources:
         mem_mb = 2000,
         runtime = 240,
@@ -33,11 +33,11 @@ rule mpileup:
 
 rule sample_genotypes_from_mpileup:
     input:
-        vcf = "results/pileups/{samp}/{samp}.chunk{chunk}.mpileup.vcf.gz",
-        idx = "results/pileups/{samp}/{samp}.chunk{chunk}.mpileup.vcf.gz.csi"
+        vcf = "results/pileups/{samp}.chunk{chunk}.mpileup.vcf.gz",
+        idx = "results/pileups/{samp}.chunk{chunk}.mpileup.vcf.gz.csi"
     output:
-        vcf = "results/sampled_genotypes/{samp}/{samp}.chunk{chunk}.mpileup.rep{repi}.vcf.gz",
-        idx = "results/sampled_genotypes/{samp}/{samp}.chunk{chunk}.mpileup.rep{repi}.vcf.gz.csi"
+        vcf = "results/sampled_genotypes/{samp}.chunk{chunk}.mpileup.rep{repi}.vcf.gz",
+        idx = "results/sampled_genotypes/{samp}.chunk{chunk}.mpileup.rep{repi}.vcf.gz.csi"
     resources:
         mem_mb = 3000,
         runtime = 720,
@@ -63,11 +63,11 @@ rule sample_genotypes_from_mpileup:
 
 rule filter_sampled_gts:
     input:
-        vcf = "results/sampled_genotypes/{samp}/{samp}.chunk{chunk}.mpileup.rep{repi}.vcf.gz",
-        idx = "results/sampled_genotypes/{samp}/{samp}.chunk{chunk}.mpileup.rep{repi}.vcf.gz.csi"
+        vcf = "results/sampled_genotypes/{samp}.chunk{chunk}.mpileup.rep{repi}.vcf.gz",
+        idx = "results/sampled_genotypes/{samp}.chunk{chunk}.mpileup.rep{repi}.vcf.gz.csi"
     output:
-        vcf = "results/sampled_genotypes/filtered/chunk{chunk}/{samp}.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.vcf.gz",
-        idx = "results/sampled_genotypes/filtered/chunk{chunk}/{samp}.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.vcf.gz.csi"
+        vcf = "results/filtered/{samp}.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.vcf.gz",
+        idx = "results/filtered/{samp}.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.vcf.gz.csi"
     resources:
         mem_mb = 2000,
         runtime = 120,
@@ -78,6 +78,7 @@ rule filter_sampled_gts:
     threads: 3
     shell:
         """
+        export OMP_NUM_THREADS={threads}
         srun -c {threads} bcftools view -o {output.vcf} --threads {threads} -Oz -i "FORMAT/DP >= {wildcards.min_dp}" {intput.vcf}
         tabix -fC {output.vcf}
         """
