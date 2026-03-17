@@ -1,0 +1,119 @@
+import pandas as pd
+
+configfile: "config/config.yaml"
+
+VCF_DIR = config["vcfDir"]
+SAMPLES = pd.read_csv(config["popFile"], sep="\t").iloc[:,0].tolist()
+CHUNK_DIR = config["chunkDir"]
+CHUNK_PREFIX = config["chunkPrefix"]
+CHUNKS   = range(1, config["nChunks"] + 1)
+REP      = range(1, config["nReps"] + 1)
+
+rule all:
+    input:
+        expand("results/snp_patt/merged.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.snp_patt_counts.w_250kb.tsv",
+            chunk=CHUNKS,
+            repi=REP,
+            min_dp=config["sampleSnpPatterns"]["minDP"]
+        ),
+        expand("results/missingness/merged.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.missingness.w_250kb.tsv",
+            chunk=CHUNKS,
+            repi=REP,
+            min_dp=config["sampleSnpPatterns"]["minDP"]
+        ),
+
+
+
+rule sample_snp_patterns_windowed:
+    input:
+        vcf = expand(
+            "results/filtered/{samp}.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.vcf.gz",
+            samp=SAMPLES,
+            allow_missing=True
+        ),
+        idx = expand(
+            "results/filtered/{samp}.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.vcf.gz.csi",
+            samp=SAMPLES,
+            allow_missing=True
+        )
+    output:
+        "results/snp_patt/merged.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.snp_patt_counts.w_250kb.tsv"
+    resources:
+        mem_mb = 2000 * 9,
+        runtime = 60 * 8,
+        tmpdir = "/scratch",
+        partition = "serial_requeue"
+    conda:
+        "../envs/bcftools.yaml"
+    threads: 9
+    params:
+        popfile=config["popFile"]
+    shell:
+        """
+        export OMP_NUM_THREADS={threads}
+        
+        # Fix a naming inconsistency
+        tmppop=$(mktemp)
+        sed -e 's/^ppilo/ppil/' {params.popfile} > $tmppop
+
+        tmpsh=$(mktemp)
+        > $tmpsh
+        echo "bcftools merge -m all {input.vcf} | \\" >> $tmpsh
+        echo "bcftools view -i 'AN >= 8' | \\" >> $tmpsh
+        echo "    ./sample_snp_patterns.windowed.py \\" >> $tmpsh
+        echo "        --populations $tmppop \\" >> $tmpsh
+        echo "        --outfile {output} \\" >> $tmpsh
+        echo "        --pop_order roem,drum,cusp,pilo \\" >> $tmpsh
+        echo "        --n_cores {threads} \\" >> $tmpsh
+        echo "        --chunk_length 120000 \\" >> $tmpsh
+        echo "        --window_size 250000" >> $tmpsh
+
+        srun -c {threads} bash $tmpsh
+        """
+
+
+rule missing_data_in_vcfs:
+    input:
+        vcf = expand(
+            "{vcf_dir}/{samp}.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.vcf.gz",
+            vcf_dir=VCF_DIR,
+            samp=SAMPLES,
+            allow_missing=True
+        ),
+        idx = expand(
+            "results/filtered/{samp}.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.vcf.gz.csi",
+            samp=SAMPLES,
+            allow_missing=True
+        )
+    output:
+        "results/missingness/merged.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.missingness.tsv"
+    resources:
+        mem_mb = 2000 * 3,
+        runtime = 60 * 4,
+        tmpdir = "/scratch",
+        partition = "serial_requeue"
+    conda:
+        "../envs/bcftools.yaml"
+    threads: 3
+    params:
+        popfile=config["popFile"],
+        chunk_dir = CHUNK_DIR,
+        chunk_prefix = CHUNK_PREFIX
+    shell:
+        """
+        export OMP_NUM_THREADS={threads}
+        chunk_bed={params.chunk_dir}/{params.chunk_prefix}.n{wildcards.chunk}.bed
+
+        # Fix a naming inconsistency
+        tmppop=$(mktemp)
+        sed -e 's/^ppilo/ppil/' {params.popfile} > $tmppop
+
+        tmprun=$(mktemp)
+        > $tmprun
+        echo "bcftools merge --threads {threads} -Ov -R $bed_fn -m all {input.vcf} | \\" >> $tmprun
+        echo "    bcftools query -f '%CHROM\t%POS[\t%GT]\n' | \\" >> $tmprun
+        echo "    awk -v wsize=250000 -f workflow/scripts/missing_data_in_vcfs.awk > $out_fn" >> $tmprun
+
+        srun -c {threads} bash $tmprun
+        """
+
