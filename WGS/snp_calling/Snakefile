@@ -1,6 +1,3 @@
-#####################
-# Snakefile scaffold
-#####################
 
 SAMPLES = [
     "pcusp_Hopkins_652_12", "pcusp_Hopkins_761c_48_1", "pcusp_Hopkins_798c", "pcusp_Hopkins_801_19_2", 
