@@ -18,10 +18,6 @@ source("../utils/genome_plots.R")
 # Install packages
 req_pkgs <- c("data.table", "stringr", "ggpubr", "viridis", "patchwork", "extrafont", "RColorBrewer")
 LoadPackages(req_pkgs)
-```
-
-## Theme/font stylings
-```{r themeSet, message = FALSE}
 SetBaseTheme(base_family = "Arial", fontpath = "../utils/fonts")
 plist <- list()
 ```
@@ -31,6 +27,7 @@ plist <- list()
 pop_d <- fread("sample_lists/foursp.pop", header = FALSE, col.names = c("ID_LONG", "POP"))
 pop_d[, ID_MED := str_remove(ID_LONG, ".*_Hopkins_")]
 pop_d[, ID_SHORT := str_remove(str_remove(ID_MED, "_.*"), "-.*")]
+pop_d[, ID_SHORT := str_c(toupper(substr(POP, 1, 1)), ID_SHORT)]
 setkey(pop_d, ID_LONG)
 ```
 
@@ -60,7 +57,7 @@ dstat_info[["w"]] <- list()
 for (i in 1:5) {
     v <- "SNP"
     for (chunk in 1:16) {
-        cmd <- str_interp("grep -v '^#' results/snp_patt/merged.chunk${chunk}.mpileup.rep${i}.DP_${dstat_info$DP}.snp_patt_counts.w_${dstat_info$wsize}.tsv")
+        cmd <- str_interp("grep -v '^#' results/snp_patt/merged.chunk${chunk}.mpileup.rep${i}.DP_${dstat_info$DP}.patt_counts.w_${dstat_info$wsize}.tsv")
         cat(cmd, "\n", sep = "")
         dstat_info[["w"]][[cmd]] <- fread(cmd = cmd, header = TRUE, sep = "\t")
         dstat_info[["w"]][[cmd]][, REP := i]
@@ -69,14 +66,12 @@ for (i in 1:5) {
     }
 
     v <- "SV"
-    for (chrom in 1:7) {
-        cmd <- str_interp("grep -v '^#' results/SVs/snp_patt/SVLEN_${dstat_info$SVLEN}/rep${i}/SV_vsPilo_FINAL_SURVMERGE.chr${chrom}.rep${i}.SVLEN_${dstat_info$SVLEN}.sv_patt_counts.w_${dstat_info$wsize}.tsv")
-        cat(cmd, "\n", sep = "")
-        dstat_info[["w"]][[cmd]] <- fread(cmd = cmd, header = TRUE, sep = "\t")
-        dstat_info[["w"]][[cmd]][, REP := i]
-        dstat_info[["w"]][[cmd]][, VARTYPE := v]
-        dstat_info[["w"]][[cmd]][, CHROM := str_remove(str_remove(CHROM, "_RagTag$"), "^chrlg")]
-    }
+    cmd <- str_interp("grep -v '^#' results/svs_patt/svs.rep${i}.SVLEN_${dstat_info$SVLEN}.patt_counts.w_${dstat_info$wsize}.tsv")
+    cat(cmd, "\n", sep = "")
+    dstat_info[["w"]][[cmd]] <- fread(cmd = cmd, header = TRUE, sep = "\t")
+    dstat_info[["w"]][[cmd]][, REP := i]
+    dstat_info[["w"]][[cmd]][, VARTYPE := v]
+    dstat_info[["w"]][[cmd]][, CHROM := str_remove(str_remove(CHROM, "_RagTag$"), "^chrlg")]
 }
 
 dstat_info[["w"]] <- rbindlist(dstat_info[["w"]])
@@ -160,21 +155,18 @@ for (v in vartypes) {
         lines_d[, eval(i) := ShortenID(get(i))]
     }
 
-    pts_d[, REGION := "Allopatry"]
-    pts_d[str_starts(ID2, "6"), REGION := "Sympatry"]
+    pts_d[, REGION := "Allopatry\nwith cuspidata"]
+    pts_d[str_starts(ID2, "D6"), REGION := "Sympatry\nwith cuspidata"]
 
-    lines_d[, REGION := "Allopatry"]
-    lines_d[str_starts(ID2, "6"), REGION := "Sympatry"]
+    lines_d[, REGION := "Allopatry\nwith cuspidata"]
+    lines_d[str_starts(ID2, "D6"), REGION := "Sympatry\nwith cuspidata"]
 
     dodge_w <- 0.8
 
-    # use_shapes <- c(0, 1, 2, 5)
-    # names(use_shapes) <- unique(pts_d$ID2)
-
     use_colors <- Load4SpPal("2drum")[c("drumBlue", "drumPink")]
-    names(use_colors) <- c("Allopatry", "Sympatry")
-    # use_colors <- tmp[c(1,1,2,2)]
-    # names(use_colors) <- c(str_subset(unique(pts_d$ID2), "^6"), str_subset(unique(pts_d$ID2), "^7"))
+    names(use_colors) <- str_c(c("Allopatry", "Sympatry"), "\nwith cuspidata")
+
+    corner_text <- data.table(x = -Inf, y = Inf, label = v, ID1 = lines_d$ID1[1])
 
     p <- ggplot() +
         geom_linerange(aes(x = ID2, ymin = MIN, ymax = MAX, color = REGION), data = lines_d,
@@ -184,6 +176,8 @@ for (v in vartypes) {
         geom_point(aes(x = ID2, y = DSTAT_med, color = REGION), data = pts_d,
                    position = position_dodge2(width = dodge_w), shape = 1) +
         geom_hline(yintercept = 0, linetype = 2) +
+        geom_text(aes(x = x, y = y, label = label), data = corner_text,
+                  hjust = -0.05, vjust = 1.3, size = 7, color = "#444444") +
         facet_wrap(vars(ID1), nrow = 1) +
         scale_color_manual(values = use_colors, name = "P. drummondii region") +
         ylim(use_ylim) +
@@ -293,7 +287,7 @@ for (sp in names(outlier_windows)) {
     print(head(out_d))
 
     intersect_outliers[[sp]] <- out_d
-    out_fn <- str_interp("results_tar/outlier_windows.shared.${sp}.bed")
+    out_fn <- str_interp("results/outlier_windows.shared.${sp}.bed")
     fwrite(out_d, file = out_fn, col.names = FALSE, row.names = FALSE, quote = FALSE, sep = "\t")
 }
 ```
@@ -362,7 +356,7 @@ tileheight <- 0.85
 plt_d <- list()
 for (i in compare_trios) {
     samps <- unlist(all_trios[i])
-    lab <- str_c(c("R", "D", "C"), ShortenID(samps), collapse = ",")
+    lab <- str_c(ShortenID(samps), collapse = ",")
     plt_d[[lab]] <- dat[ID1 == samps[1] & ID2 == samps[2] & ID3 == samps[3]][CHROM == "1"]
     plt_d[[lab]][, LABEL := lab]
     plt_d[[lab]][, OUTLIER := WINDOW %in% c(outlier_windows$drum[[i]], outlier_windows$roem[[i]])]
@@ -381,7 +375,7 @@ annot_d[SHAPE == 1, Y := 1 - (tileheight / 2) * 1.1]
 annot_d[SHAPE == 2, Y := 2 + (tileheight / 2) * 1.1]
 annot_d[SHAPE == 3, Y := 1.5]
 
-tilewidth <- plt_d[1:2, diff(COORD)]
+tilewidth <- 250e3 / 1e6
 
 dmax <- plt_d[, max(abs(range(DSTAT_med)))]
 
@@ -389,18 +383,25 @@ use_gradient <- brewer.pal(11, "RdYlBu")
 use_colors <- use_gradient[c(1, 11)]
 names(use_colors) <- c("-1", "1")
 
-
-# use_shapes <- c(25, 24, 23)
 use_shapes <- c(2, 6, 18)
 names(use_shapes) <- as.character(1:3)
 
 use_sizes <- c(1, 1, 2) * 1.4
 names(use_sizes) <- names(use_shapes)
 
-limits <- list("x" = c(-1, max(plt_d$COORD) + 1),
-               "y" = range(annot_d$Y) + c(-0.1, 0.1))
+chr1_len <- 1129
+
+limits <- list(x = c(-1, chr1_len + 1),
+               y = range(annot_d$Y) + c(-0.1, 0.1))
+
+box_d <- data.table(XMIN = rep(- tilewidth / 2, 2),
+                    XMAX = rep(chr1_len + tilewidth / 2, 2),
+                    YMIN = c(1, 2) - tileheight / 2,
+                    YMAX = c(1, 2) + tileheight / 2)
 
 p <- ggplot() +
+    geom_rect(aes(xmin = XMIN, xmax = XMAX, ymin = YMIN, ymax = YMAX), data = box_d,
+              color = "#777777", fill = NA, linewidth = 0.75) +
     geom_tile(aes(x = COORD, y = LABEL, fill = DSTAT_med), data = plt_d, width = tilewidth, height = tileheight) +
     scale_fill_gradientn(colors = use_gradient, limits = c(-dmax, dmax), name = "D-statistic") +
     geom_point(aes(x = COORD, y = Y, color = COLOR, shape = SHAPE, size = SHAPE), data = annot_d) +
@@ -413,7 +414,6 @@ p <- ggplot() +
     theme(axis.title.y = element_blank(),
           axis.line.y = element_blank())
 print(p)
-ggsave(p, file = "tmp.pdf", width = 12, height = 3)
 
 plist[["tile"]] <- p
 ```
@@ -555,21 +555,6 @@ p <- ggscatter(plt_d, x = "DSTAT_med_X", y = "DSTAT_med_Y", color = "EXTREME", a
     geom_abline(intercept = 0, slope = 1, color = "gray", linetype = 2)
 print(p)
 dev.off()
-
-#     CHROM     START       END  DSTAT_lwr_X  DSTAT_med_X  DSTAT_upr_X  DSTAT_lwr_Y  DSTAT_med_Y  DSTAT_upr_Y
-#    <fctr>     <int>     <int>        <num>        <num>        <num>        <num>        <num>        <num>
-# 1:      1 834000000 834250000   -0.4828023   -0.4364090   -0.4094112    0.4696562    0.4930876    0.5277855
-# 2:      2 375000000 375250000   -0.5501294   -0.5196305   -0.4942731    0.3963303    0.4171123    0.4358673
-# 3:      4  70750000  71000000   -0.5266384   -0.5015823   -0.4951383    0.4617709    0.4768683    0.4970593
-
-
-# foo <- dstat_info$w[VARTYPE=="SNP"][CHROM == "1" & START == 834000000][, QuantileOverReplicates(DSTAT), by = .(ID1, ID2, ID3)]
-# ggdensity(foo, x = "MED", fill = "ID1", color = "ID2")
-# dev.off()
-
-
-
-
 ```
 
 # Figure 4 full plot
@@ -579,35 +564,44 @@ dadi_dim <- c(557, 365)
 
 scatter_w <- 199
 w <- dadi_dim[1] + scatter_w
-tile_w <- w * 12 / 14
+tile_w <- w * 11 / 14
 
-row_h <- cumsum(c(w / 3, dadi_dim[2], w / 14 * 2.5))
+# row_h <- cumsum(c(w / 3, dadi_dim[2], w / 14 * 2.5))
+row_h <- c(w / 3, dadi_dim[2], w / 14 * 2.5)
 
 print(row_h[length(row_h)] / w * 12)
 
+r1_shorten <- 20 # Shorten row 1 width by this amount
+
 # top left bottom right
 layout <- c(
-    area(1,           1, row_h[1], w / 2), # R1
-    area(1, (w / 2) + 1, row_h[1], w),
+    # DefineArea(0, 0,
+    #            w = r1_shorten, h = row_h[1]),
+    DefineArea(r1_shorten, 0,
+               w = (w - r1_shorten) / 2, h = row_h[1]),
+    DefineArea(r1_shorten + (w - r1_shorten) / 2, 0,
+               w = (w - r1_shorten) / 2, h = row_h[1]),
 
-    area(row_h[1] + 1, 1, row_h[2], scatter_w), # R2
-    # area(row_h[1] + 1, scatter_w + 1, row_h[2], w),
+    DefineArea(0, row_h[1],
+               w = scatter_w, h = row_h[2]),
 
-    area(row_h[2] + 1, 1, row_h[3], tile_w), # R3
-    area(row_h[2] + 1, tile_w + 1, row_h[3], w)
+    DefineArea(0, row_h[1] + row_h[2],
+               w = tile_w, h = row_h[3]),
+    DefineArea(tile_w, row_h[1] + row_h[2],
+               w = w - tile_w, h = row_h[3])
 )
 
 pSNP <- plist$SNP # nolint: object_name_linter.
-pSV <- plist$SV + theme(legend.position = "none") # nolint: object_name_linter.
+pSV <- plist$SV # nolint: object_name_linter.
 pCorr <- plist$SV_SNP_corr # nolint: object_name_linter.
 pTile <- plist$tile # nolint: object_name_linter.
 pBoot <- plist$boot # nolint: object_name_linter.
 
-p <- free(pSNP, side = "l") + pSV + free(pCorr, side = "l") + pTile + pBoot + plot_layout(design = layout)
+p <- ((pSNP + pSV + plot_layout(guides = "collect")) + pCorr +
+    (free(pTile + plot_layout(guides = "keep"), side = "l")) + free(pBoot, side = "l")) +
+    plot_layout(design = layout)
 
-ggsave(p, file = "figure4.pdf", width = 12, height = 11.93651)
-# ggsave(p, file = "tmp.pdf", width = 12, height = 12.36508)
-# ggsave(p, file = "tmp.pdf", width = 14, height = 14.42593)
+ggsave(p, file = "figure4.pdf", width = 12, height = 12 / max(layout$r) * max(layout$b))
 print(p)
 ```
 
@@ -634,12 +628,12 @@ out_d[, WINDOW := factor(WINDOW, levels = samp_windows)] # Order by sample
 setorder(out_d, WINDOW)
 out_d[, WINDOW := NULL]
 
-out_fn <- str_interp("results_tar/samp_windows.bed")
+out_fn <- str_interp("results/samp_windows.bed")
 fwrite(out_d, file = out_fn, col.names = FALSE, row.names = FALSE, quote = FALSE, sep = "\t")
 ```
 
 # Save for debugging
 ```{r saveData}
-save.image("results/figure4.dstat.RData")
+save.image("results/figure4.RData")
 # load("results/figure4.dstat.RData")
 ```
