@@ -4,7 +4,7 @@ refFasta: "ref/pilo.v1.0.ncbi.fasta"
 
 chunkDir: "windows"
 chunkPrefix: "pilo.v1.0.ncbi.split_300Mb"
-nChunks: 25
+nChunks: 24
 
 nReps: 5
 
