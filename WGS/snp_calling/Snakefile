@@ -15,14 +15,14 @@ BAM_DIR  = config["bamDir"]
 rule all:
     input:
         expand(
-            "results/mpileup/sampled_genotypes/filtered/chunk{chunk}/{samp}.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.vcf.gz",
+            "results/filtered/{samp}.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.vcf.gz",
             samp=SAMPLES,
             chunk=CHUNKS,
             repi=REP,
             min_dp=MIN_DP,
         ),
         expand(
-            "results/mpileup/sampled_genotypes/filtered/chunk{chunk}/{samp}.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.vcf.gz.csi",
+            "results/filtered/{samp}.chunk{chunk}.mpileup.rep{repi}.DP_{min_dp}.vcf.gz.csi",
             samp=SAMPLES,
             chunk=CHUNKS,
             repi=REP,
