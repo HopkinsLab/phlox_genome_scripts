@@ -1,8 +1,9 @@
+svVcf: "/n/holylfs05/LABS/hopkins_lab/Lab/RESOURCES/variants/annual_phlox_SVs-2025-09-22/vs_ppilo/SV_vsPilo_FINAL_SURVMERGE.vcf.gz"
 vcfDir: "../WGS/snp_calling/results/filtered"
 
 chunkDir: "windows"
 chunkPrefix: "pilo.v1.0.ncbi.split_300Mb"
-nChunks: 25
+nChunks: 24
 
 nReps: 5
 
@@ -15,3 +16,6 @@ samples: ["pcusp_Hopkins_652_12", "pcusp_Hopkins_761c_48_1", "pcusp_Hopkins_798c
 
 sampleSnpPatterns:
   minDP: 5
+
+sampleSvPatterns:
+  minSVLEN: 500
