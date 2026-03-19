@@ -420,14 +420,14 @@ CircosLegend <- function(kind = "feat",
     require(ggplot2)
     if (kind == "feat") {
         fake_dat <- data.frame(x = names(tr1_colors), y = seq_along(tr1_colors))
-        p <- ggbarplot(fake_dat, x = "x", y = "y", fill = "x", color = NA) +
+        p <- ggbarplot(fake_dat, x = "x", y = "y", fill = "x", color = NA, font.family = "Arial") +
             scale_fill_manual(values = tr1_colors) +
             guides(fill = guide_legend(title = "Feature occupancy",
                                        direction = direction,
                                        position = position))
     } else if (kind == "svs") {
         fake_dat <- data.frame(x = as.character(0:1), y = 0:1)
-        p <- ggbarplot(fake_dat, x = "x", y = "y", fill = "y") +
+        p <- ggbarplot(fake_dat, x = "x", y = "y", fill = "y", font.family = "Arial") +
             scale_fill_gradient(name = "Normalized\nSV density",
                                 low = "#FFFFFF",
                                 high = target_dark) +
@@ -441,7 +441,7 @@ CircosLegend <- function(kind = "feat",
         fake_dat <- data.frame(x = as.character(rep(seq_along(use_col), 2)),
                                y = rep(seq_along(use_col), 2),
                                grp = factor(rep(names(use_col), 2), levels = names(use_col)))
-        p <- ggpubr::ggline(fake_dat, x = "x", y = "y", color = "grp", plot_type = "l", size=2) +
+        p <- ggpubr::ggline(fake_dat, x = "x", y = "y", color = "grp", plot_type = "l", size = 2, font.family = "Arial") +
             scale_color_manual(values = use_col) +
             guides(color = guide_legend(title = "Genetic variation",
                                         direction = direction,
@@ -856,7 +856,8 @@ p <- p +
               size = 2.8 * txt_size_factor,
               hjust = 0.5,
               vjust = 0.5,
-              color = "black") +
+              color = "black",
+              family = "Arial") +
     geom_text(aes(x = X_LAB,
                   y = Y_LAB,
                   label = LABEL),
@@ -864,7 +865,8 @@ p <- p +
               size = 2.8 * txt_size_factor,
               hjust = 0.5,
               vjust = 0.5,
-              color = "white") +
+              color = "white",
+              family = "Arial") +
     geom_text(aes(x = X_LAB,
                   y = Y_LAB,
                   label = LABEL,
@@ -873,7 +875,8 @@ p <- p +
                   angle = ANGLE,
                   color = repFamily),
               data = plt_d[!(FEATURE %in% c(intergenic_str, "gene"))],
-              size = 3 * txt_size_factor) +
+              size = 3 * txt_size_factor,
+              family = "Arial") +
     scale_color_manual(values = use_colors, guide = "none") +
     geom_text(aes(x = X_LAB,
                   y = Y_LAB,
@@ -883,12 +886,14 @@ p <- p +
                   angle = ANGLE),
               data = plt_d[FEATURE %in% "gene"],
               color = "black",
-              size = 3 * txt_size_factor) +
+              size = 3 * txt_size_factor,
+              family = "Arial") +
     coord_radial(theta = "y",
                  expand = FALSE,
                  start = -pi / 2,
                  direction = -1L) +
-    theme(axis.line = element_blank(),
+    theme(text = element_text(family = "Arial"),
+          axis.line = element_blank(),
           axis.ticks = element_blank(),
           axis.title = element_blank(),
           axis.text = element_blank(),
@@ -1188,8 +1193,9 @@ p <- ggbarplot(plt_d,
                x = "FEATURE",
                y = "Y",
                fill = "SV type",
-               palette = "d3") +
-    geom_text(aes(label = "***"), data = annot_d) +
+               palette = "d3",
+               font.family = "Arial") +
+    geom_text(aes(label = "***"), data = annot_d, family = "Arial") +
     xlab("Genomic feature") +
     ylab("SVs per feature megabase")
 print(p)

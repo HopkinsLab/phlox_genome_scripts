@@ -79,8 +79,7 @@ symp_dist_cutoff <- 30
 p <- ggplot(nearest_cusp, aes(DIST)) +
     stat_ecdf(geom = "step") +
     geom_vline(xintercept = symp_dist_cutoff, color = "red") +
-    xlab("Drum pop distance to nearest cusp") +
-    theme_pubr()
+    xlab("Drum pop distance to nearest cusp")
 print(p)
 
 symp_drum <- nearest_cusp[DIST < symp_dist_cutoff, DRUM_POP]
@@ -136,7 +135,7 @@ for (nm in names(pca_info)) {
         cvar <- "PC1"
     }
 
-    p <- ggscatter(plt_d, x = xyvar[1], y = xyvar[2], color = cvar, alpha = ifelse(nm == "three", 0.5, 0.75)) +
+    p <- ggscatter(plt_d, x = xyvar[1], y = xyvar[2], color = cvar, alpha = ifelse(nm == "three", 0.5, 0.75), font.family = "Arial") +
         xlab(axis_labs[1]) + ylab(axis_labs[2])
     if (nm == "three") {
         use_col <- Load4SpPal()
@@ -212,8 +211,7 @@ CV error for different k values
 ```{r plotAdmixError, fig.width = 4, fig.height = 3}
 plt_d <- admix_info[["cv"]]
 p <- ggplot(plt_d, aes(x = K, y = CV_error)) +
-    geom_point(color = "dodgerblue") + geom_line(color = "dodgerblue") +
-    theme_pubr()
+    geom_point(color = "dodgerblue") + geom_line(color = "dodgerblue")
 print(p)
 ```
 
@@ -260,7 +258,6 @@ p <- ggplot(plt_d, aes(x = IID, y = value, fill = pop_infer)) +
     scale_fill_manual(values = admix_pal) +
     ylab("Proportion inferred ancestry") +
     ggtitle(str_interp("k = ${k}")) +
-    theme_pubr() +
     theme(
         axis.line.x = element_blank(),
         axis.title.x = element_blank(),
@@ -379,7 +376,6 @@ AnnotPopulations <- function(p, cur_samps, met_d, fill_data, aggr_func = "mean",
         annot_d <- annot_d[, .(size = .N, lat = lat[1], long = long[1]), by = Population]
         annot_d[, eval(fill_var) := tmp]
 
-        # scale_nm <- str_c(str_to_sentence(aggr_func), " ", fill_var)
         p <- p + new_scale_fill() + geom_point(aes(x = long, y = lat, size = size, fill = .data[[fill_var]]), data = annot_d, shape = 21, color = color)
     } else {
         annot_d <- annot_d[, .(size = .N, lat = lat[1], long = long[1]), by = Population]
@@ -505,11 +501,11 @@ for (sp in SpeciesNames("short")) {
         add = "reg.line",
         conf.int = TRUE,
         color = "max_long",
-        # color = Load4SpPal()["drum"],
         cor.coef = TRUE,
         alpha = 0.5,
         xlab = "Population distance (km)",
-        ylab = "Fst"
+        ylab = "Fst",
+        font.family = "Arial"
     )
     p <- p + scale_color_viridis(option = "plasma")
 
@@ -581,7 +577,7 @@ p <- ggplot() +
     geom_line(aes(x = DIST, y = FST, color = LABEL), data = annot_d, linewidth = 1) +
     scale_fill_manual(values = use_colors, guide = "none") +
     scale_color_manual(values = use_colors, name = "Regression", breaks = col_brks, labels = col_labs) +
-    geom_text(aes(x = x, y = y, label = lab), data = label_d, parse = TRUE, hjust = 0)#, vjust = 1)
+    geom_text(aes(x = x, y = y, label = lab), data = label_d, parse = TRUE, hjust = 0, family = "Arial")#, vjust = 1)
 
 if (include_allosymp) {
     tmp_d <- label_d[SPECIES == "drum"]
@@ -591,18 +587,16 @@ if (include_allosymp) {
                        data = tmp_d,
                        parse = TRUE,
                        color = use_colors["allo vs symp"],
-                       hjust = 0)#, vjust = 1)
+                       hjust = 0,
+                       family = "Arial")
 }
 
 p <- p +
     facet_wrap(vars(SPECIES), nrow = 1, scales = "free") +
     xlab("Population pair distance (km)") +
     ylab("Fst") +
-    theme_pubr() +
     theme(strip.background = element_blank(), strip.text.x = element_blank())
 
-# stat_str <- FormatR2PvalLab( unlist(all_fst_lm[["allo_symp"]][c("rsq", "pval")]) )
-#     label_d[[4]] <- data.table(x = -Inf, y = Inf, lab = stat_str, SPECIES = )
 plist[["ibd"]][["all"]] <- p
 print(p)
 ```
@@ -630,7 +624,8 @@ p <- ggscatter(
     cor.coef = TRUE,
     alpha = 0.7,
     xlab = "Population distance (km)",
-    ylab = "Fst"
+    ylab = "Fst",
+    font.family = "Arial"
 )
 
 p <- p +
@@ -739,7 +734,6 @@ plist[["amova"]] <- list()
 lvls <- c("Between pop", "Within pop, between ind", "Within ind")
 use_colors <- colorRampPalette(c("#333333", "#FFFFFF"))(3)
 names(use_colors) <- lvls
-# use_ylab[["raw"]] <- expression("Genetic variance component"~sigma^2)
 
 plt_d <- list()
 for (sp in SpeciesNames()) {
@@ -843,7 +837,7 @@ if (detect_outliers) {
         c("MIN", "Q1", "MED", "Q3", "MAX")
     )
     p <- ggplot(plt_d, aes(x = SPECIES, ymin = MIN, lower = Q1, middle = MED, upper = Q3, ymax = MAX, fill = SPECIES)) +
-        geom_boxplot(stat = "identity", alpha = 0.7) + theme_pubr()
+        geom_boxplot(stat = "identity", alpha = 0.7)
 }
 p <- p + scale_fill_manual(name = "species", values = Load4SpPal()) +
     ylab("Inbreeding coefficient (F)") +
@@ -891,7 +885,6 @@ pPcaAll <- plist$pca$three + theme(legend.position = c(0.8, 0.8), # nolint: obje
                                    legend.text = element_text(face = "italic"),
                                    legend.background = element_rect(fill = "white", color = "black"))
 pAdmix  <- plist$admix + theme(title = element_blank(), legend.position = "none") # nolint: object_name_linter.
-# pHet    <- plist$het + coord_flip() + theme(axis.title.y = element_blank(), axis.title.x = element_text())
 pAmovaRaw  <- plist$amova$raw + theme(panel.background = element_blank()) # nolint: object_name_linter.
 pAmovaNorm  <- plist$amova$norm + theme(axis.title.y = element_blank(), # nolint: object_name_linter.
                                         axis.text.y = element_blank(),
