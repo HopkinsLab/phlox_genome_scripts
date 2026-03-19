@@ -637,6 +637,18 @@ p <- p +
 print(p)
 plist[["ibd"]][["symp"]] <- p
 ```
+## P-value testing
+
+Does the "in sympatry" variable for *P. drummondii* significantly affect our regression model?
+```{r pvalIsoByDistSymp}
+set.seed(18318)
+reg_d <- all_fst[SPECIES == "drum"]
+nboot <- 500
+nsubsamp <- reg_d[, sum(((Four_groups1 == "WestRed") + (Four_groups2 == "WestRed")) == 1)]
+boot_slope <- replicate(RunOLS(reg_d[sample.int(.N, size = nsubsamp, replace = TRUE)], "DIST", "FST")$model$coefficients[2], n = nboot)
+pval <- sum(boot_slope < all_fst_lm$allo_symp$model$coefficients[2]) / nboot
+cat(str_interp("Bootstrap one-sided pval of slopes less than observed: ${pval}\n"))
+```
 
 # AMOVA
 
