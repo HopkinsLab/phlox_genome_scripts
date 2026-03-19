@@ -645,9 +645,11 @@ set.seed(18318)
 reg_d <- all_fst[SPECIES == "drum"]
 nboot <- 500
 nsubsamp <- reg_d[, sum(((Four_groups1 == "WestRed") + (Four_groups2 == "WestRed")) == 1)]
-boot_slope <- replicate(RunOLS(reg_d[sample.int(.N, size = nsubsamp, replace = TRUE)], "DIST", "FST")$model$coefficients[2], n = nboot)
-pval <- sum(boot_slope < all_fst_lm$allo_symp$model$coefficients[2]) / nboot
-cat(str_interp("Bootstrap one-sided pval of slopes less than observed: ${pval}\n"))
+boot_coef <- replicate(RunOLS(reg_d[sample.int(.N, size = nsubsamp, replace = TRUE)], "DIST", "FST")$model$coefficients, n = nboot)
+pval <- c(sum(boot_coef[1,] < all_fst_lm$allo_symp$model$coefficients[1]),
+          sum(boot_coef[2,] < all_fst_lm$allo_symp$model$coefficients[2])) / nboot
+cat(str_interp("Bootstrap one-sided pval of intercept less than observed: ${pval[1]}\n"))
+cat(str_interp("Bootstrap one-sided pval of slope less than observed: ${pval[2]}\n"))
 ```
 
 # AMOVA
