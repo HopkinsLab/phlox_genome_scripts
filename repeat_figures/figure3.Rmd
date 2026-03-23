@@ -218,3 +218,7 @@ ggsave(p, file="figure3.pdf", width=10, height=15)
 print(p)
 ```
 
+## Save for testing
+```{r save}
+save.image("figure3.Rdata")
+```
