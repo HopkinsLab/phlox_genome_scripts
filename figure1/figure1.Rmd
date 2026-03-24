@@ -22,6 +22,7 @@ req_pkgs <- c(
     "stringr",
     "circlize",
     "shades",
+    "extrafont",
     "ggpubr",
     "ggtree",
     "ComplexHeatmap",
@@ -45,7 +46,11 @@ req_pkgs <- c(
 LoadPackages(req_pkgs)
 LoadAsyntLib()
 
-SetBaseTheme(base_family = "Arial", fontpath = "../utils/fonts")
+# Set fonts
+# SetBaseTheme(base_family = "Arial", fontpath = "../utils/fonts")
+font_import(paths = "../utils/fonts", prompt = FALSE)
+loadfonts(device = "pdf")
+ggplot2::theme_set(theme_pubr(base_family = "Arial"))
 par(family = "Arial")
 ```
 
@@ -218,12 +223,12 @@ plots downstream with patchwork.
 ```{r circPlotFuncs, warnings = FALSE, messages = FALSE}
 FourColorFunc <- function() {
     require(grDevices)
-    rev(c(colorRampPalette(c("#FFFFFF", Load4SpPal("2drum")["drumPink"], "#000000"))(14)[c(2, 6, 10)], "#BBBBBB"))
+    rev(c(colorRampPalette(c("#FFFFFF", Load4SpPal("2drum")["drumPink"], "#000000"))(14)[c(2, 6, 10)], "#BBBBBB")) # nolint: object_usage_linter.
 }
 
 FiveColorFunc <- function() {
     require(grDevices)
-    rev(c(colorRampPalette(c("#FFFFFF", Load4SpPal("2drum")["drumPink"], "#000000"))(14)[c(2, 5, 8, 11)], "#B8B8B8"))
+    rev(c(colorRampPalette(c("#FFFFFF", Load4SpPal("2drum")["drumPink"], "#000000"))(14)[c(2, 5, 8, 11)], "#B8B8B8")) # nolint: object_usage_linter.
 }
 
 if (include_gaps) {
@@ -247,8 +252,9 @@ CircosPlot <- function(outer_only = FALSE) {
     require(ComplexHeatmap)
     require(grid)
 
-    INDEX <- CHROM <- . <- NULL # for linter
-    SIZE <- START <- PROP_BP <- FEATURE <- NULL # nolint: object_name_linter.
+    INDEX <- CHROM <- COORD <- X  <- Y <- SPECIES <- . <- NULL # for linter
+    SIZE <- START <- PROP_BP <- FEATURE <- COUNT <- NULL # nolint: object_name_linter.
+    pop <- pop1 <- pop2 <- avg_wc_fst <- avg_pi <- NULL # nolint: object_name_linter.
 
     #########################
     # [ Init ]
@@ -337,7 +343,7 @@ CircosPlot <- function(outer_only = FALSE) {
 
     for (sp in names(track_nums)) {
         trN <- track_nums[[sp]] # Track number # nolint: object_name_linter.
-        use_color <- Load4SpPal()[sp]
+        use_color <- Load4SpPal()[sp] # nolint: object_usage_linter.
 
         if (sp == "drum") {
             plt_d <- pixy_info$data$pi[pop == sp][!is.na(avg_pi), .(Y = mean(avg_pi)), by = .(CHROM, COORD = as.character(COORD))]
@@ -365,7 +371,7 @@ CircosPlot <- function(outer_only = FALSE) {
         sv_d[, X := as.numeric(COORD)]
         sv_d[, Y := COUNT / max(COUNT)]
 
-        col_ramp <- colorRamp2(0:1, colors = c("#FFFFFF", BrightMatch(use_color, target_dark)))
+        col_ramp <- colorRamp2(0:1, colors = c("#FFFFFF", BrightMatch(use_color, target_dark))) # nolint: object_usage_linter.
 
         circos.track(
             sv_d$CHROM,
@@ -419,9 +425,9 @@ CircosLegend <- function(kind = "feat",
     require(ggpubr)
     require(ggplot2)
     if (kind == "feat") {
-        fake_dat <- data.frame(x = names(tr1_colors), y = seq_along(tr1_colors))
+        fake_dat <- data.frame(x = names(tr1_colors), y = seq_along(tr1_colors)) # nolint: object_usage_linter.
         p <- ggbarplot(fake_dat, x = "x", y = "y", fill = "x", color = NA, font.family = "Arial") +
-            scale_fill_manual(values = tr1_colors) +
+            scale_fill_manual(values = tr1_colors) + # nolint: object_usage_linter.
             guides(fill = guide_legend(title = "Feature occupancy",
                                        direction = direction,
                                        position = position))
@@ -436,7 +442,7 @@ CircosLegend <- function(kind = "feat",
             theme(legend.title.position = "top",
                   legend.key.width = bar_width)
     } else if (kind == "pi_fst") {
-        use_col <- Load4SpPal()[names(track_nums)]
+        use_col <- Load4SpPal()[names(track_nums)] # nolint: object_usage_linter.
         names(use_col) <- c("Nt diversity (P. drum)", "Fst (P. roem vs. P. drum)", "Fst (P. cusp vs. P. drum)")
         fake_dat <- data.frame(x = as.character(rep(seq_along(use_col), 2)),
                                y = rep(seq_along(use_col), 2),
