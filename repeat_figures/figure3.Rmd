@@ -131,7 +131,7 @@ for (nm in comp_tab[["NAME"]]) {
         geom_ribbon(aes(x = .data[[xvar]], y = .data[[yvar]], ymin = LWR, ymax = UPR),
                     data = m$fitdat, fill = "gray", color = NA, alpha = 0.8) +
         geom_line(aes(x = .data[[xvar]], y = .data[[yvar]]), data = m$fitdat, color = "blue") +
-        annotate("text", x = -Inf, y = Inf, hjust = -0.1, vjust = 1, label = labelstr, parse = TRUE)
+        annotate("text", x = -Inf, y = Inf, hjust = -0.1, vjust = 1, label = labelstr, parse = TRUE, family = "Arial")
 
     if (str_starts(xlab_str, "bquote")) {
         p <- p + xlab(eval(parse(text = xlab_str)))
@@ -188,10 +188,11 @@ if (pval == 0) {
 }
 
 p <- ggplot(r2_boot, aes(x = RSQ)) +
-    # geom_density(fill = "steelblue1") +
-    geom_histogram(bins = nclass.FD(r2_boot$RSQ), fill = "steelblue1", color = "black") +
+    geom_density(fill = "steelblue1", color="black") +
+    # geom_histogram(bins = nclass.FD(r2_boot$RSQ), fill = "steelblue1", color = "black") +
     geom_vline(aes(xintercept = r2_obs), color = "red") +
-    annotate("text", x = -Inf, y = Inf, hjust = -0.5, vjust = 1, label = pval_lab, parse = TRUE) +
+    annotate("text", x = -Inf, y = Inf, hjust = -0.1, vjust = 1,
+             label = pval_lab, parse = TRUE, family = "Arial", size = 3) +
     xlab(bquote("Pseudo-" * italic(R)^2)) +
     ylab("Density")
 
@@ -208,10 +209,14 @@ p1 <- plist[["indRepCount_drum::drumPres"]]
 p2 <- plist[["cuspPres::drumPres"]]
 p3 <- plist[["drumPres::drumUniq"]]
 p4 <- plist[["cuspUniq::drumUniq"]]
-p5 <- plist[["boot_hist"]]
+p5 <- plist[["boot_hist"]] +
+    theme(plot.background = element_blank(),
+          panel.background = element_blank(),
+          axis.title = element_text(size = 7),
+          axis.text = element_text(size = 6))
 
 p <- p1 + p2 + p3 + p4 +
-    inset_element(p5, left = 0.8, bottom = 0, right = 1, top = 0.2) +
+    inset_element(p5, left = 0.62, bottom = 0, right = 1, top = 0.35) +
     plot_layout(ncol = 2)
 ggsave(p, file = "figure3.pdf", width = 10, height = 10)
 print(p)
@@ -219,6 +224,6 @@ print(p)
 
 ## Save for testing
 ```{r save}
-# save.image("figure3.Rdata")
-#load("figure3.Rdata")
+# save.image("results/figure3.Rdata")
+#load("results/figure3.Rdata")
 ```
