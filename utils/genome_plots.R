@@ -209,6 +209,7 @@ LabelChromosomes <- function(p, ref, width = 0.1, gap_size = 1, ypos = NULL, ...
 BuildConnectorPolygons <- function(reg_dat, end_pos, width, connect_margin, ypos) {
     #' Build curved "riparian" style connector polygons between synteny regions
     require(data.table)
+    require(GENESPACE)
 
     Rsp <- Rchrom <- Qsp <- Qchrom <- SPECIES <- sp_pair <- NULL # for linter
     Rend <- Rstart  <- Qend <- Qstart <- orient <- NULL # for linter
@@ -482,13 +483,21 @@ Load4SpPal <- function(pal = "default", for_text = FALSE) {
     return(out_colors)
 }
 
-SetBaseTheme <- function(base_family, fontpath = "fonts/", device = "pdf") {
-    require(extrafont)
-    require(ggplot2)
+SetBaseTheme <- function(base_family, fontpath = "fonts/") {
+    require(showtext)
     require(ggpubr)
+    require(stringr)
 
-    font_import(paths = fontpath, prompt = FALSE)
-    loadfonts(device = device)
+    # font_import(paths = fontpath, prompt = FALSE)
+    # loadfonts(device = device)
+    sysfonts::font_add(
+        family = base_family,
+        regular = str_interp("${fontpath}/${base_family}.ttf"),
+        bold = str_interp("${fontpath}/${base_family}_Bold.ttf"),
+        italic = str_interp("${fontpath}/${base_family}_Italic.ttf"),
+        bolditalic = str_interp("${fontpath}/${base_family}_Bold_Italic.ttf")
+    )
+    showtext_auto()
 
     ggplot2::theme_set(theme_pubr(base_family = base_family))
 }
