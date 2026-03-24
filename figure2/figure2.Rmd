@@ -575,6 +575,7 @@ p <- ggplot() +
     geom_point(aes(x = DIST, y = FST, color = SPECIES), data = all_fst, alpha = 0.5) +
     geom_ribbon(aes(x = DIST, ymin = LWR, ymax = UPR, fill = LABEL), data = annot_d, alpha = 0.3, color = NA) +
     geom_line(aes(x = DIST, y = FST, color = LABEL), data = annot_d, linewidth = 1) +
+    geom_hline(yintercept = 0.15, color = "darkgrey", linetype = "dashed") +
     scale_fill_manual(values = use_colors, guide = "none") +
     scale_color_manual(values = use_colors, name = "Regression", breaks = col_brks, labels = col_labs) +
     geom_text(aes(x = x, y = y, label = lab), data = label_d, parse = TRUE, hjust = 0, family = "Arial")#, vjust = 1)
@@ -593,7 +594,8 @@ if (include_allosymp) {
 
 p <- p +
     facet_wrap(vars(SPECIES), nrow = 1, scales = "free") +
-    xlab("Population pair distance (km)") +
+    xlab("Distance between population pairs (km)") +
+    # xlab("Population pair distance (km)") +
     ylab("Fst") +
     theme(strip.background = element_blank(), strip.text.x = element_blank())
 
@@ -618,8 +620,6 @@ p <- ggscatter(
     plt_d,
     x = "DIST",
     y = "FST",
-    # add = "reg.line",
-    # conf.int = TRUE,
     color = "SYMP",
     cor.coef = TRUE,
     alpha = 0.7,
