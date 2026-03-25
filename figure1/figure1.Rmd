@@ -47,10 +47,10 @@ LoadPackages(req_pkgs)
 LoadAsyntLib()
 
 # Set fonts
-# SetBaseTheme(base_family = "Arial", fontpath = "../utils/fonts")
-font_import(paths = "../utils/fonts", prompt = FALSE)
-loadfonts(device = "pdf")
-ggplot2::theme_set(theme_pubr(base_family = "Arial"))
+# font_import(paths = "../utils/fonts", prompt = FALSE)
+# loadfonts(device = "pdf")
+# ggplot2::theme_set(theme_pubr(base_family = "Arial"))
+SetBaseTheme(base_family = "Arial", fontpath = "~/.local/share/fonts")
 par(family = "Arial")
 ```
 
@@ -583,7 +583,7 @@ tip_colors <- Load4SpPal(for_text = TRUE)
 names(tip_colors) <- substr(names(tip_colors), 1, 1)
 
 p1 <- ggtree(plt_phy, ladderize = FALSE) %<+% tip_data +
-    geom_tiplab(aes(color = species), align = FALSE) +
+    geom_tiplab(aes(color = species), align = FALSE, family = "Arial") +
     scale_color_manual(values = tip_colors) +
     scale_x_continuous(expand = expansion(c(0, 0.26))) +
     geom_cladelabel(node = 21, label = "", color = sp_colors["pcusp"], barsize = barsize, align = TRUE, offset = clade_offset) +
@@ -1303,7 +1303,9 @@ p <- wrap_elements(full = ~ CircosPlot(outer_only = FALSE)) +
     free(p_f, side = "r") +
     plot_layout(design = areas)
 
-ggsave(p, file = "figure1.pdf",
+ggsave(p, file = "figure1.pdf", 
+       device = cairo_pdf,
+       family = "Arial",
        width = max(areas$r) / 2,
        height = max(areas$b) / 2)
 ```

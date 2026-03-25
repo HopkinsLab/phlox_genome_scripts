@@ -483,21 +483,18 @@ Load4SpPal <- function(pal = "default", for_text = FALSE) {
     return(out_colors)
 }
 
-SetBaseTheme <- function(base_family, fontpath = "fonts/") {
-    require(showtext)
+SetBaseTheme <- function(base_family, fontpath = "fonts/", device = "pdf") {
     require(ggpubr)
     require(stringr)
+    require(extrafont)
 
-    # font_import(paths = fontpath, prompt = FALSE)
-    # loadfonts(device = device)
-    sysfonts::font_add(
-        family = base_family,
-        regular = str_interp("${fontpath}/${base_family}.ttf"),
-        bold = str_interp("${fontpath}/${base_family}_Bold.ttf"),
-        italic = str_interp("${fontpath}/${base_family}_Italic.ttf"),
-        bolditalic = str_interp("${fontpath}/${base_family}_Bold_Italic.ttf")
-    )
-    showtext_auto()
+    font_import(paths = fontpath, prompt = FALSE)
+    loadfonts(device = device)
+
+    font_exists <- str_detect(system(str_interp("fc-match ${base_family}"), intern = TRUE), base_family)
+    if (!font_exists) {
+        warning("Can't find font. Try installing and updating cache with:\ncp -r ../utils/fonts ~/.local/share\nfc-cache -fv\n")
+    }
 
     ggplot2::theme_set(theme_pubr(base_family = base_family))
 }

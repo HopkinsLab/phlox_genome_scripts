@@ -32,7 +32,7 @@ LoadEEMSplotLib()
 
 ## Theme/font stylings
 ```{r themeSet, message = FALSE}
-SetBaseTheme(base_family = "Arial", fontpath = "../utils/fonts/")
+SetBaseTheme(base_family = "Arial", fontpath = "~/.local/share/fonts")
 plist <- list()
 # pc1_color_range <- c("#524C98", "#D1A4BB")
 pc1_color_range <- c("#352E80", "#D699B7", "#FFDEEE")
@@ -943,7 +943,7 @@ p <- pPcaAll + pAdmix + free(pAmovaRaw, side = "l") + free(pAmovaNorm, side = "r
     pIbdAll +
     plot_layout(design = layout)
 
-ggsave(p, file = "figure2.pdf", width = 14, height = 14)
+ggsave(p, file = "figure2.pdf", width = 14, height = 14, device = cairo_pdf, family = "Arial")
 print(p)
 ```
 

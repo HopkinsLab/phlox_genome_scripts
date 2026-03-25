@@ -20,7 +20,7 @@ source("../utils/genome_plots.R")
 req_pkgs <- c("data.table", "stringr", "ggpubr", "patchwork")
 LoadPackages(req_pkgs)
 
-SetBaseTheme(base_family = "Arial", fontpath = "../utils/fonts")
+SetBaseTheme(base_family = "Arial", fontpath = "~/.local/share/fonts")
 ```
 
 Load repeat data. This is genome assembly repeat abundances.
@@ -218,7 +218,11 @@ p5 <- plist[["boot_hist"]] +
 p <- p1 + p2 + p3 + p4 +
     inset_element(p5, left = 0.62, bottom = 0, right = 1, top = 0.35) +
     plot_layout(ncol = 2)
-ggsave(p, file = "figure3.pdf", width = 10, height = 10)
+ggsave(p, file = "figure3.pdf",
+       device = cairo_pdf,
+       family = "Arial",
+       width = 10,
+       height = 10)
 print(p)
 ```
 

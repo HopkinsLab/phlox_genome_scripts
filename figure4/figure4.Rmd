@@ -18,7 +18,7 @@ source("../utils/genome_plots.R")
 # Install packages
 req_pkgs <- c("data.table", "stringr", "ggpubr", "viridis", "patchwork", "extrafont", "RColorBrewer")
 LoadPackages(req_pkgs)
-SetBaseTheme(base_family = "Arial", fontpath = "../utils/fonts")
+SetBaseTheme(base_family = "Arial", fontpath = "~/.local/share/fonts")
 plist <- list()
 ```
 
@@ -599,7 +599,11 @@ p <- ((pSNP + pSV + plot_layout(guides = "collect")) + pCorr +
     (free(pTile + plot_layout(guides = "keep"), side = "l")) + free(pBoot, side = "l")) +
     plot_layout(design = layout)
 
-ggsave(p, file = "figure4.pdf", width = 12, height = 12 / max(layout$r) * max(layout$b))
+ggsave(p, file = "figure4.pdf",
+       width = 12,
+       height = 12 / max(layout$r) * max(layout$b),
+       device = cairo_pdf,
+       family = "Arial")
 print(p)
 ```
 
