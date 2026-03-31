@@ -278,7 +278,10 @@ for (sp in names(outlier_windows)) {
     out_d <- dat[WINDOW %in% count_tab[["WINDOW"]], .(CHROM = CHROM[1],
                                                       START = START[1],
                                                       END = END[1],
-                                                      MISSINGPROP = MISSINGPROP_med[1]), by = WINDOW]
+                                                      MISSINGPROP = MISSINGPROP_med[1],
+                                                      DSTAT_MED = median(DSTAT_med),
+                                                      DSTAT_Q1 = quantile(DSTAT_med, 0.25),
+                                                      DSTAT_Q3 = quantile(DSTAT_med, 0.75)), by = WINDOW]
     out_d <- merge(out_d, count_tab, by = "WINDOW")
     out_d[, WINDOW := NULL]
     setorderv(out_d, c("COUNT", "CHROM", "START"), order = c(-1, 1, 1))
@@ -625,7 +628,9 @@ ignore_w <- union(unlist(outlier_windows$drum), unlist(outlier_windows$roem)) # 
 w_pool <- dat[!(WINDOW %in% ignore_w)][BBAA_med > bbaa_thresh, .N == nrow(all_trios), by = WINDOW][(V1), WINDOW]
 samp_windows <- sample(w_pool, size = nsamp, replace = FALSE)
 
-out_d <- dat[WINDOW %in% samp_windows, .(CHROM[1], START[1], END[1], MISSINGPROP_med[1]), by = WINDOW]
+out_d <- dat[WINDOW %in% samp_windows, .(CHROM[1], START[1], END[1],
+                                         MISSINGPROP_med[1],
+                                         median(DSTAT_med), quantile(DSTAT_med, 0.25), quantile(DSTAT_med, 0.75)), by = WINDOW]
 out_d[, WINDOW := factor(WINDOW, levels = samp_windows)] # Order by sample
 setorder(out_d, WINDOW)
 out_d[, WINDOW := NULL]
@@ -637,5 +642,5 @@ fwrite(out_d, file = out_fn, col.names = FALSE, row.names = FALSE, quote = FALSE
 # Save for debugging
 ```{r saveData}
 save.image("results/figure4.RData")
-# load("results/figure4.dstat.RData")
+# load("results/figure4.RData")
 ```
