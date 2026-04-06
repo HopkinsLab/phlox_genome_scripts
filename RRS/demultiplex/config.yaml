@@ -1,0 +1,98 @@
+# config.yaml
+
+####################################
+# General settings
+####################################
+
+# Default directory containing the raw FASTQ sequence read files.
+rawReadsDir: "raw_reads"
+outDir: "results"
+
+# FASTQ files containing raw reads
+# The filenames specified herein should live in the `rawReadsDir` directory 
+#
+# Please do not modify the top heading of this section, "seqLibraries."
+#
+# All files under a library (e.g. "LIBNAME") should begin with the library name.
+# Please modify the "LIBNAME" sub-heading to match the library name.
+#
+# This pipeline is intended for libraries containing paired-end reads.
+# Please specify the files containing R1 (forward) reads in the list following sub-heading `R1`
+# Please specify the files containing R2 (reverse) reads in the list following sub-heading `R2`
+# Multiple files (usually corresponding to different lanes) may be included in the list 
+# as long as they are ordered the same under the `R1` and `R2` sub-headings.
+#
+# In the default example below, we have a library called LIBNAME, which was pair-end sequenced on two lanes.
+seqLibraries:
+  Phlox_1_S1: 
+    R1: ["Phlox_1_S1_L003_R1_001.fastq.gz", "Phlox_1_S1_L004_R1_001.fastq.gz"]
+    R2: ["Phlox_1_S1_L003_R2_001.fastq.gz", "Phlox_1_S1_L004_R2_001.fastq.gz"]
+    oligoLen: 0
+  Phlox_2_S2: 
+    R1: ["Phlox_2_S2_L003_R1_001.fastq.gz", "Phlox_2_S2_L004_R1_001.fastq.gz"]
+    R2: ["Phlox_2_S2_L003_R2_001.fastq.gz", "Phlox_2_S2_L004_R2_001.fastq.gz"]
+    oligoLen: 0
+  Phlox_3_S3: 
+    R1: ["Phlox_3_S3_L003_R1_001.fastq.gz", "Phlox_3_S3_L004_R1_001.fastq.gz"]
+    R2: ["Phlox_3_S3_L003_R2_001.fastq.gz", "Phlox_3_S3_L004_R2_001.fastq.gz"]
+    oligoLen: 0
+  Phlox_4_S4: 
+    R1: ["Phlox_4_S4_L003_R1_001.fastq.gz", "Phlox_4_S4_L004_R1_001.fastq.gz"]
+    R2: ["Phlox_4_S4_L003_R2_001.fastq.gz", "Phlox_4_S4_L004_R2_001.fastq.gz"]
+    oligoLen: 0
+  Phlox_7_S7: 
+    R1: ["Phlox_7_S7_L003_R1_001.fastq.gz", "Phlox_7_S7_L004_R1_001.fastq.gz"]
+    R2: ["Phlox_7_S7_L003_R2_001.fastq.gz", "Phlox_7_S7_L004_R2_001.fastq.gz"]  
+    oligoLen: 0
+  Phlox_8_S8: 
+    R1: ["Phlox_8_S8_L003_R1_001.fastq.gz", "Phlox_8_S8_L004_R1_001.fastq.gz"]
+    R2: ["Phlox_8_S8_L003_R2_001.fastq.gz", "Phlox_8_S8_L004_R2_001.fastq.gz"]
+    oligoLen: 0
+  Hop_S_i1_S1: 
+    R1: ["Hop_S_i1_S1_L001_R1_001.fastq.gz", "Hop_S_i1_S1_L002_R1_001.fastq.gz"]
+    R2: ["Hop_S_i1_S1_L001_R2_001.fastq.gz", "Hop_S_i1_S1_L002_R2_001.fastq.gz"]
+    oligoLen: 5
+  Hop_S_i2_S2: 
+    R1: ["Hop_S_i2_S2_L001_R1_001.fastq.gz", "Hop_S_i2_S2_L002_R1_001.fastq.gz"]
+    R2: ["Hop_S_i2_S2_L001_R2_001.fastq.gz", "Hop_S_i2_S2_L002_R2_001.fastq.gz"]
+    oligoLen: 5
+  Hop_S_i3_S3: 
+    R1: ["Hop_S_i3_S3_L001_R1_001.fastq.gz", "Hop_S_i3_S3_L002_R1_001.fastq.gz"]
+    R2: ["Hop_S_i3_S3_L001_R2_001.fastq.gz", "Hop_S_i3_S3_L002_R2_001.fastq.gz"]
+    oligoLen: 5
+
+# Parameter `oligoLen`
+# Length of random oligo barcode used to tag each read, allowing for identification of PCR clones
+# Default value: 5. This usually doesn't need modification, but in previous experiments, 
+# shorter random oligos have been used 
+# IMPORTANT: set `oligoLen` to 0 if you would like to skip PCR clone filtering 
+# oligoLen: 5 
+
+####################################
+# Prep (move Ns)
+####################################
+
+# ... no settings here for now ...
+
+####################################
+# Demultiplex (stacks)
+####################################
+
+# The directory containing the stacks software suite
+stacksDir: "/n/holylfs05/LABS/hopkins_lab/Users/felixw/software/stacks-2.65/"
+
+####################################
+# Trimmomatic
+####################################
+# The trimmomatic executable
+trimmomaticJar: "/n/holylfs05/LABS/hopkins_lab/Users/felixw/software/Trimmomatic-0.39/trimmomatic-0.39.jar" # Make sure to load java (e.g., `module load jdk/10.0.1-fasrc01`)
+
+# Trimmomatic-specific parameters. 
+# Default settings should work in most cases.
+# If interested in modifying these values, check the Trimmomatic 
+# documentation for details
+ILLUMINACLIP: "/n/holylfs05/LABS/hopkins_lab/Users/felixw/software/Trimmomatic-0.39/adapters/TruSeq3-PE.fa:2:30:10" # <fastaWithAdaptersEtc>:<seed mismatches>:<palindrome clip threshold>:<simple clip threshold>
+TRAILING: 3 # <quality>
+SLIDINGWINDOW: "4:15" # <windowSize>:<requiredQuality>
+MINLEN: 36 # <length>
+
