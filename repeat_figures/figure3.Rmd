@@ -17,7 +17,7 @@ Load packages
 ```{r loadPkg, message=FALSE}
 source("../utils/genome_plots.R")
 
-req_pkgs <- c("data.table", "stringr", "ggpubr", "patchwork")
+req_pkgs <- c("data.table", "stringr", "ggpubr", "patchwork", "ggpattern")
 LoadPackages(req_pkgs)
 
 SetBaseTheme(base_family = "Arial", fontpath = "~/.local/share/fonts")
@@ -200,11 +200,260 @@ plist[["boot_hist"]] <- p
 print(p)
 ```
 
-## Joint plot
+## Conceptual plot
+
+Let's make a visual aid to help demonstrate how TE-SV counts work
+
+### Load genotype data
+```{r loadGT}
+gt_dat <- fread("tables/phlox_variation_summary.FINAL.gt.tsv.gz", header = TRUE)[CHROM == "chrlg1_RagTag"]
+gt_dat[, `pdrum_REF:GT` := NULL]
+
+# Simplify column names
+old_nms <- str_subset(names(gt_dat), ":GT$")
+new_nms <- str_remove(old_nms, ":GT$")
+gt_cols <- new_nms <- unname(sapply(new_nms, RenameWGS))
+setnames(gt_dat, old_nms, new_nms)
+
+# Filter for only complete data
+rm_i <- apply(gt_dat[, gt_cols, with = FALSE], 1, function(x) any(x == "./."))
+gt_dat <- gt_dat[!rm_i, ]
+```
+
+### Pick a window to plot
+```{r pickExampleWindow}
+# Annotate SV type
+for (x in c("INS", "DEL", "DUP", "INV")) {
+    gt_dat[str_detect(ID, x), SVTYPE := x]
+}
+
+# List of samples by species
+samp_list <- list()
+for (sp in SpeciesNames()) {
+    samp_list[[sp]] <- str_subset(gt_cols, str_c("^", toupper(substr(sp, 1, 1))))
+}
+
+# 1. Compute per-row presence/absence by species -----------------------------
+
+# presence (at least one non-0/0 genotype) in each species
+gt_dat[, presence_cusp := rowSums(.SD != "0/0") > 0, .SDcols = samp_list$cusp]
+gt_dat[, presence_drum := rowSums(.SD != "0/0") > 0, .SDcols = samp_list$drum]
+gt_dat[, presence_roem := rowSums(.SD != "0/0") > 0, .SDcols = samp_list$roem]
+
+# species-unique and shared SVs
+gt_dat[, drum_only  := presence_drum & !presence_cusp & !presence_roem]
+gt_dat[, cusp_only  := presence_cusp & !presence_drum & !presence_roem]
+gt_dat[, roem_only  := presence_roem & !presence_drum & !presence_cusp]
+
+gt_dat[, drum_shared := presence_drum & (presence_cusp | presence_roem)]
+gt_dat[, cusp_shared := presence_cusp & (presence_drum | presence_roem)]
+
+# restrict to INS / DEL only
+gt_dat[, valid_type := SVTYPE %in% c("INS", "DEL")]
+
+# convenience logicals for types
+gt_dat[, is_INS := SVTYPE == "INS"]
+gt_dat[, is_DEL := SVTYPE == "DEL"]
+
+# 2. Scan windows of size w to find the first satisfying all conditions -----
+
+# Window width
+w <- 20
+
+N <- nrow(gt_dat)
+start_idx <- NA_integer_
+
+if (N >= w) {
+    for (i in 1:(N - w + 1)) {
+        win <- i:(i + w - 1)
+
+        # (1) mix of INS and DEL types only, and both types present
+        cond_types_only   <- all(gt_dat$valid_type[win])
+        cond_has_INS      <- any(gt_dat$is_INS[win])
+        cond_has_DEL      <- any(gt_dat$is_DEL[win])
+
+        # (2) at least one SV only in drum
+        cond_drum_only    <- any(gt_dat$drum_only[win])
+
+        # (3) at least one SV only in cusp
+        cond_cusp_only    <- any(gt_dat$cusp_only[win])
+
+        # (4) at least one SV present in drum but not unique to drum
+        cond_drum_shared  <- any(gt_dat$drum_shared[win])
+
+        # (5) at least one SV present in cusp but not unique to cusp
+        cond_cusp_shared  <- any(gt_dat$cusp_shared[win])
+
+        if (cond_types_only &&
+            cond_has_INS && cond_has_DEL &&
+            cond_drum_only && cond_cusp_only &&
+            cond_drum_shared && cond_cusp_shared) {
+            start_idx <- i
+            break
+        }
+    }
+}
+
+# Extract window
+if (!is.na(start_idx)) {
+    gt_window <- gt_dat[start_idx:(start_idx + w - 1)]
+    print(gt_window)
+} else {
+    warning("No good window found")
+}
+```
+
+### Plot genotype matrix
+```{r plotGtMatrix}
+non_sample_cols <- c("POS", "SVTYPE")
+sample_cols <- unlist(samp_list)
+
+gt_long <- melt(
+    gt_window,
+    id.vars = non_sample_cols,
+    measure.vars = sample_cols,
+    variable.name = "sample",
+    value.name   = "genotype"
+)
+
+# factor for samples in the exact column order of gt_window
+gt_long[, sample := factor(sample, levels = sample_cols)]
+
+# For variants: use POS as factor, ordered by POS.
+gt_long[, POS_factor := factor(POS, levels = unique(POS[order(POS)]))]
+
+# Colors
+drum_pink <- unname(Load4SpPal("2drum")["drumPink"])
+geno_colors <- colorRampPalette(c("white", drum_pink))(3)
+names(geno_colors) <- c("0/0", "0/1", "1/1")
+
+# For patterning
+gt_long[, nonzero := genotype != "0/0"]
+
+# Plot
+p <- ggplot(gt_long, aes(x = sample, y = POS_factor,
+                         fill = genotype, pattern = SVTYPE, pattern_alpha = nonzero)) +
+    geom_tile_pattern(
+        color          = "grey40",     # cell borders (optional)
+        pattern_fill   = "black",
+        pattern_colour = "black",
+        pattern_angle  = 45,
+        pattern_density = 0.02,
+        pattern_spacing = 0.02,
+        pattern_key_scale_factor = 0.6
+    ) +
+    # Annotation lines
+    annotate("path", x = c(4.5,  4.5), y = c(0, nrow(gt_window)) + 0.5, color = "black", size = 1.5) +
+    annotate("path", x = c(8.5,  8.5), y = c(0, nrow(gt_window)) + 0.5, color = "black", size = 1.5) +
+    annotate("path", x = c(0.5,  4.5) + c(0.05, -0.05), y = c(0.3, 0.3), color = Load4SpPal()["cusp"], size = 2) +
+    annotate("path", x = c(4.5,  8.5) + c(0.05, -0.05), y = c(0.3, 0.3), color = Load4SpPal()["drum"], size = 2) +
+    annotate("path", x = c(8.5, 11.5) + c(0.05, -0.05), y = c(0.3, 0.3), color = Load4SpPal()["roem"], size = 2) +
+    # Legends
+    scale_fill_manual(values = geno_colors, name = "Genotype") +
+    scale_pattern_manual(values = c("INS" = "stripe", "DEL" = "none"),
+                         name = "SV type") +
+    scale_pattern_alpha_manual(values = c(`FALSE` = 0, `TRUE` = 1),
+                               guide  = "none") +
+    scale_y_discrete(limits = rev(levels(gt_long$POS_factor)), name = "Chr1 position") +
+    scale_x_discrete(name = "Sample") +
+    coord_fixed() +  # make cells square
+    theme(
+        axis.text.x  = element_text(size = 9, angle = 45, hjust = 1, vjust = 1, family = "Arial"),
+        axis.text.y  = element_text(size = 8, family = "Arial"),
+        axis.line.x = element_blank(),
+        axis.line.y = element_blank(),
+        panel.grid   = element_blank(),
+        axis.ticks   = element_line(color = "black"),
+        legend.position = "left"
+    )
+
+print(p)
+plist[["gt_matrix"]] <- p
+```
+
+```{r plotSpeciesMatrix}
+species_levels <- names(samp_list)
+
+species_long <- rbindlist(list(
+    gt_window[, .(POS,
+                  species = "cusp",
+                  present = presence_cusp,
+                  unique  = cusp_only)],
+    gt_window[, .(POS,
+                  species = "drum",
+                  present = presence_drum,
+                  unique  = drum_only)],
+    gt_window[, .(POS,
+                  species = "roem",
+                  present = presence_roem,
+                  unique  = roem_only)]
+))
+
+# Order rows and columns
+species_long[, species := factor(species, levels = species_levels)]
+species_long[, POS_factor := factor(POS, levels = unique(POS[order(POS)]))]
+
+# Fill colors
+species_colors <- Load4SpPal()[species_levels]
+
+# We'll use presence to decide whether to fill with the species color or not (NA = white)
+species_long[, fill_color := NA_character_]
+species_long[, fill_color := ifelse(present, as.character(species), NA)]
+species_long[, fill_color := factor(fill_color, levels = species_levels)]
+
+# Plot species matrix
+p <- ggplot(species_long, aes(x = species, y = POS_factor)) +
+    # Tiles: colored by species if present, else white
+    geom_tile(aes(fill = fill_color), color = "grey40") +
+    # Black point if unique in that species
+    geom_point(data = species_long[unique == TRUE], color = "black", size  = 1.8) +
+    scale_fill_manual(
+        values = species_colors,
+        na.value = "white",
+        breaks = species_levels,
+        labels = ConvertSpeciesNames(species_levels, "short", "G_species"),
+        name   = "Species\n(present)"
+    ) +
+    # Annotation path same as for gt matrix plot to make sizes the same
+    annotate("path", x = c(0,  0), y = c(0.3, 0.3), color = "#FFFFFF00", size = 2) +
+    scale_y_discrete(limits = rev(levels(species_long$POS_factor))) +
+    coord_fixed() +  # make cells square
+    theme(
+        panel.grid  = element_blank(),
+        # axis.text.x = element_text(size = 9, angle = 45, hjust = 1, vjust = 1),
+        axis.text = element_blank(),
+        axis.title.x = element_blank(),
+        axis.title.y = element_blank(),
+        # axis.ticks.x  = element_line(color = "black"),
+        axis.ticks  = element_blank(),
+        axis.line.x = element_blank(),
+        axis.line.y = element_blank(),
+        legend.text = element_text(family = "Arial", face = "italic"),
+        legend.position = "left"
+    )
+
+print(p)
+plist[["sp_matrix"]] <- p
+```
+
+## Joint plots
 
 Use patchwork syntax to display key plots together
 
-```{r plotJoint, fig.width=10, fig.height=10}
+```{r plotMatricesJoint, fig.width=10, fig.height=10}
+p <- plist[["gt_matrix"]] + plist[["sp_matrix"]] +
+    plot_layout(ncol = 2, axes = "collect", guides = "collect") &
+    theme(legend.position = "left", legend.box = "vertical")
+
+ggsave(p, file = "figure3.part1.pdf",
+       device = cairo_pdf,
+       family = "Arial",
+       width = 8,
+       height = 6)
+print(p)
+```
+
+```{r plotTeSvJoint, fig.width=10, fig.height=10}
 p1 <- plist[["indRepCount_drum::drumPres"]]
 p2 <- plist[["cuspPres::drumPres"]]
 p3 <- plist[["drumPres::drumUniq"]]
@@ -218,16 +467,10 @@ p5 <- plist[["boot_hist"]] +
 p <- p1 + p2 + p3 + p4 +
     inset_element(p5, left = 0.62, bottom = 0, right = 1, top = 0.35) +
     plot_layout(ncol = 2)
-ggsave(p, file = "figure3.pdf",
+ggsave(p, file = "figure3.part2.pdf",
        device = cairo_pdf,
        family = "Arial",
        width = 10,
        height = 10)
 print(p)
-```
-
-## Save for testing
-```{r save}
-# save.image("results/figure3.Rdata")
-#load("results/figure3.Rdata")
 ```
