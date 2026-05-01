@@ -261,7 +261,7 @@ gt_dat[, is_DEL := SVTYPE == "DEL"]
 w <- 20
 
 N <- nrow(gt_dat)
-start_idx <- NA_integer_
+start_idx <- c()
 
 if (N >= w) {
     for (i in 1:(N - w + 1)) {
@@ -288,23 +288,23 @@ if (N >= w) {
             cond_has_INS && cond_has_DEL &&
             cond_drum_only && cond_cusp_only &&
             cond_drum_shared && cond_cusp_shared) {
-            start_idx <- i
-            break
+            start_idx <- c(start_idx, i)
         }
     }
-}
-
-# Extract window
-if (!is.na(start_idx)) {
-    gt_window <- gt_dat[start_idx:(start_idx + w - 1)]
-    print(gt_window)
-} else {
-    warning("No good window found")
 }
 ```
 
 ### Plot genotype matrix
 ```{r plotGtMatrix}
+# Extract window
+if (!is.null(start_idx)) {
+    i <- start_idx[1200]
+    gt_window <- gt_dat[i:(i + w - 1)]
+    print(gt_window)
+} else {
+    warning("No good window found")
+}
+
 non_sample_cols <- c("POS", "SVTYPE")
 sample_cols <- unlist(samp_list)
 
