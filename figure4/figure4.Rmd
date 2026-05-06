@@ -290,6 +290,9 @@ for (sp in names(outlier_windows)) {
     intersect_outliers[[sp]] <- out_d
     out_fn <- str_interp("results/outlier_windows.shared.${sp}.bed")
     fwrite(out_d, file = out_fn, col.names = FALSE, row.names = FALSE, quote = FALSE, sep = "\t")
+
+    out_fn <- str_interp("results/outlier_windows.shared.${sp}.hdr")
+    cat(str_c(names(out_d), collapse = "\t"), "\n", file = out_fn)
 }
 ```
 
@@ -419,29 +422,7 @@ plist[["tile"]] <- p
 ```
 
 ### Compute likelihood of overlap w/ bootstrap
-```{r bootstrapOverlap, fig.width = 4, fig.height = 3}
-tmp_d <- list()
-for (i in compare_trios) {
-    nm <- as.character(i)
-    samps <- unlist(all_trios[i])
-    tmp_d[[nm]] <- dat[ID1 == samps[1] & ID2 == samps[2] & ID3 == samps[3]]
-
-    tmp_d[[nm]][, INDEX := i]
-    tmp_d[[nm]][, OUTLIER := "."]
-    for (sp in c("drum", "roem")) {
-        tmp_d[[nm]][WINDOW %in% outlier_windows[[sp]][[i]], OUTLIER := sp]
-    }
-}
-tmp_d <- rbindlist(tmp_d)
-
-tab <- tmp_d[, table(WINDOW)]
-joint_w <- names(tab)[tab == 2]
-tmp_d <- tmp_d[WINDOW %in% joint_w]
-nwindows <- tmp_d[, .N / 2]
-boot_params <- tmp_d[, as.list(table(OUTLIER)), by = INDEX][, .(drum, roem)]
-
-noverlap <- tmp_d[OUTLIER != ".", sum(table(WINDOW) == 2), by = .(OUTLIER)][, sum(V1)]
-
+```{r bootstrapOverlap}
 BootstrapWindowOverlap <- function(nwindows, outlier1, outlier2, noverlap, nboot = 5000) {
     SampleFunc <- function() {
         samp1 <- sample.int(nwindows, size = sum(outlier1), replace = FALSE)
@@ -455,11 +436,59 @@ BootstrapWindowOverlap <- function(nwindows, outlier1, outlier2, noverlap, nboot
 
     boot_replicates <- replicate(SampleFunc(), n = nboot)
     pval <- sum(boot_replicates > noverlap) / nboot
-    return(list("replicates" = boot_replicates, "pval" = pval))
+
+    param_list <- list(nwindows, outlier1, outlier2, noverlap, nboot)
+    names(param_list) <- c("nwindows", "outlier1", "outlier2", "noverlap", "nboot")
+    return(list("replicates" = boot_replicates,
+                "pval" = pval,
+                "params" = param_list))
 }
 
-boot_res <- BootstrapWindowOverlap(nwindows, unlist(boot_params[1, ]), unlist(boot_params[2, ]), noverlap)
+overlap_bootstrap <- list()
+for (i in seq_len(nrow(uniq_pairs))) {
+    tmp_d <- list()
+    for (j in uniq_pairs[i, ]) {
+        nm <- as.character(j)
+        samps <- unlist(all_trios[j])
+        tmp_d[[nm]] <- dat[ID1 == samps[1] & ID2 == samps[2] & ID3 == samps[3]]
 
+        tmp_d[[nm]][, INDEX := j]
+        tmp_d[[nm]][, OUTLIER := "."]
+        for (sp in c("drum", "roem")) {
+            tmp_d[[nm]][WINDOW %in% outlier_windows[[sp]][[j]], OUTLIER := sp]
+        }
+    }
+    tmp_d <- rbindlist(tmp_d)
+
+    tab <- tmp_d[, table(WINDOW)]
+    joint_w <- names(tab)[tab == 2]
+    tmp_d <- tmp_d[WINDOW %in% joint_w]
+    nwindows <- tmp_d[, .N / 2]
+    boot_params <- tmp_d[, as.list(table(OUTLIER)), by = INDEX][, .(drum, roem)]
+    noverlap <- tmp_d[OUTLIER != ".", sum(table(WINDOW) == 2), by = .(OUTLIER)][, sum(V1)]
+
+    overlap_bootstrap[[i]] <- BootstrapWindowOverlap(
+        nwindows,
+        unlist(boot_params[1, ]),
+        unlist(boot_params[2, ]),
+        noverlap
+    )
+}
+
+
+# Compute an overall p-value for observing as many overlaps as we did
+ntotal <- sum(unlist(lapply(overlap_bootstrap, function(x) x$params$noverlap)))
+ntotal_boot <- colSums(matrix(unlist(lapply(overlap_bootstrap, function(x) x$replicates)), nrow = length(overlap_bootstrap), byrow = TRUE))
+pval <- sum(ntotal_boot > ntotal) / length(ntotal_boot)
+if (pval == 0) {
+    cat(str_interp("p < $[0.1e]{1 / length(ntotal_boot)}\n"))
+} else {
+    cat(str_interp("p = $[0.1e]{pval}\n"))
+}
+```
+
+```{r plotBoot, fig.width = 4, fig.height = 3}
+boot_res <- overlap_bootstrap[[which(apply(uniq_pairs, 1, function(x) all(x == compare_trios)))]]
 plt_d <- data.table(X = boot_res$replicates)
 
 p <- gghistogram(plt_d, x = "X", fill = "#333333", color = NA, binwidth = 1) +
