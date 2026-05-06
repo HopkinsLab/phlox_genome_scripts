@@ -331,17 +331,8 @@ names(geno_colors) <- c("0/0", "0/1", "1/1")
 gt_long[, nonzero := genotype != "0/0"]
 
 # Plot
-p <- ggplot(gt_long, aes(x = sample, y = POS_factor,
-                         fill = genotype, pattern = SVTYPE, pattern_alpha = nonzero)) +
-    geom_tile_pattern(
-        color          = "grey40",     # cell borders (optional)
-        pattern_fill   = "black",
-        pattern_colour = "black",
-        pattern_angle  = 45,
-        pattern_density = 0.02,
-        pattern_spacing = 0.02,
-        pattern_key_scale_factor = 0.6
-    ) +
+p <- ggplot(gt_long, aes(x = sample, y = POS_factor, fill = genotype)) +
+    geom_tile(color = "grey40") +
     # Annotation lines
     annotate("path", x = c(4.5,  4.5), y = c(0, nrow(gt_window)) + 0.5, color = "black", size = 1.5) +
     annotate("path", x = c(8.5,  8.5), y = c(0, nrow(gt_window)) + 0.5, color = "black", size = 1.5) +
@@ -364,7 +355,7 @@ p <- ggplot(gt_long, aes(x = sample, y = POS_factor,
         axis.line.y = element_blank(),
         panel.grid   = element_blank(),
         axis.ticks   = element_line(color = "black"),
-        legend.position = "left"
+        legend.position = "right"
     )
 
 print(p)
@@ -404,9 +395,7 @@ species_long[, fill_color := factor(fill_color, levels = species_levels)]
 # Plot species matrix
 p <- ggplot(species_long, aes(x = species, y = POS_factor)) +
     # Tiles: colored by species if present, else white
-    geom_tile(aes(fill = fill_color), color = "grey40") +
-    # Black point if unique in that species
-    geom_point(data = species_long[unique == TRUE], color = "black", size  = 1.8) +
+    geom_tile(aes(fill = fill_color, alpha = unique), color = "grey40") +
     scale_fill_manual(
         values = species_colors,
         na.value = "white",
@@ -414,6 +403,7 @@ p <- ggplot(species_long, aes(x = species, y = POS_factor)) +
         labels = ConvertSpeciesNames(species_levels, "short", "G_species"),
         name   = "Species\n(present)"
     ) +
+    scale_alpha_manual(values = c(`TRUE` = 1, `FALSE` = 0.5), guide = "none") +
     # Annotation path same as for gt matrix plot to make sizes the same
     annotate("path", x = c(0,  0), y = c(0.3, 0.3), color = "#FFFFFF00", size = 2) +
     scale_y_discrete(limits = rev(levels(species_long$POS_factor))) +
@@ -429,7 +419,7 @@ p <- ggplot(species_long, aes(x = species, y = POS_factor)) +
         axis.line.x = element_blank(),
         axis.line.y = element_blank(),
         legend.text = element_text(family = "Arial", face = "italic"),
-        legend.position = "left"
+        legend.position = "right"
     )
 
 print(p)
@@ -443,7 +433,7 @@ Use patchwork syntax to display key plots together
 ```{r plotMatricesJoint, fig.width=10, fig.height=10}
 p <- plist[["gt_matrix"]] + plist[["sp_matrix"]] +
     plot_layout(ncol = 2, axes = "collect", guides = "collect") &
-    theme(legend.position = "left", legend.box = "vertical")
+    theme(legend.position = "right", legend.box = "vertical")
 
 ggsave(p, file = "figure3.part1.pdf",
        device = cairo_pdf,
