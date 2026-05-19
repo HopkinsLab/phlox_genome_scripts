@@ -28,11 +28,12 @@ req_pkgs <- c("data.table",
               "poppr")
 LoadPackages(req_pkgs)
 LoadEEMSplotLib()
+
+SetBaseTheme(base_family = "Arial", fontpath = "~/.local/share/fonts")
 ```
 
 ## Theme/font stylings
 ```{r themeSet, message = FALSE}
-SetBaseTheme(base_family = "Arial", fontpath = "~/.local/share/fonts")
 plist <- list()
 # pc1_color_range <- c("#524C98", "#D1A4BB")
 pc1_color_range <- c("#352E80", "#D699B7", "#FFDEEE")
@@ -313,11 +314,18 @@ AnnotTexasBorder <- function(p, bounding_box = TRUE, bounding_box_color = "black
     require(data.table)
     L2 <- LONG <- LAT <- NULL # for linting
     texas <- LoadTexasBorder() # nolint: object_usage_linter.
+    edplat <- LoadEdwardsPlateau() # nolint: object_usage_linter.
     p <- p + annotate(
         "path",
         x = texas[L2 == 1, LONG],
         y = texas[L2 == 1, LAT],
         color = "black"
+    ) + annotate(
+        "path",
+        x = edplat[L2 == 1, LONG],
+        y = edplat[L2 == 1, LAT],
+        color = "brown",
+        linetype = "dotted"
     )
 
     cur_lim <- GetPlotLimits(p) # nolint: object_usage_linter.
@@ -910,7 +918,7 @@ pPcaDrum <- plist$pca$drum + theme(legend.position = c(0.5, 0.9), legend.directi
 pEemsMigDrum <- plist$eems$drum$mrates01 + # nolint: object_name_linter.
     annotate("text", x = -Inf, y = Inf, hjust = -0.25, vjust = 1.7, label = ConvertSpeciesNames("drum"),
              color = Load4SpPal()["drum"], fontface = "italic", size = 7) +
-    theme(legend.position = c(0.15, 0.7), legend.direction = "vertical") + guides(fill = "none")
+    theme(legend.position = c(0.88, 0.8), legend.direction = "vertical") + guides(fill = "none")
 pEemsMigCusp <- plist$eems$cusp$mrates01 + # nolint: object_name_linter.
     annotate("text", x = -Inf, y = Inf, hjust = -0.25, vjust = 1.7, label = ConvertSpeciesNames("cusp"),
              color = Load4SpPal()["cusp"], fontface = "italic", size = 7) +
@@ -923,24 +931,24 @@ pEemsMigRoem <- plist$eems$roem$mrates01 + # nolint: object_name_linter.
 # Row 3
 pIbdAll <- plist$ibd$all # nolint: object_name_linter.
 
-row_h <- cumsum(c(30, 30, 25))
+row_h <- cumsum(c(30, 25, 30))
 col_w <- cumsum(c(30, 54))
 col2_splitpoint <- col_w[1] + (diff(col_w) * 2 / 3)
 
 # area(top, left, bottom, right)
 layout <- c(
-    area(1,  1, row_h[1], col_w[1]),   area(1,  col_w[1] + 1, row_h[1] / 2, col_w[2]),
-    area(row_h[1] / 2 + 1, col_w[1] + 1, row_h[1], round(col_w[1] + diff(col_w) / 4)),
-    area(row_h[1] / 2 + 1, round(col_w[1] + diff(col_w) / 4) + 1, row_h[1], col_w[2]),
-    area(row_h[1] + 1, 1, row_h[2], col_w[1]), area(row_h[1] + 1, col_w[1] + 1, row_h[2], col2_splitpoint),
-    area(row_h[1] + 1, col2_splitpoint + 1, mean(row_h[1:2]), col_w[2]), area(mean(row_h[1:2]) + 1, col2_splitpoint + 1, row_h[2], col_w[2]),
-    area(row_h[2] + 1, 1, row_h[3], col_w[2])
+    area(1,  1, row_h[1], col_w[1]),   area(1,  col_w[1] + 1, row_h[1] / 2, col_w[2]), # PCA, Structure
+    area(row_h[1] / 2 + 1, col_w[1] + 1, row_h[1], round(col_w[1] + diff(col_w) / 4)), # AMOVA (raw)
+    area(row_h[1] / 2 + 1, round(col_w[1] + diff(col_w) / 4) + 1, row_h[1], col_w[2]), # AMOVA (norm)
+    area(row_h[1] + 1, 1, row_h[2], col_w[2]), # IBD (3 subfigs)
+    area(row_h[2] + 1, 1, row_h[3], col_w[1]), area(row_h[2] + 1, col_w[1] + 1, row_h[3], col2_splitpoint), # PCA (drum), EEMS (drum)
+    area(row_h[2] + 1, col2_splitpoint + 1, mean(row_h[2:3]), col_w[2]), area(mean(row_h[2:3]) + 1, col2_splitpoint + 1, row_h[3], col_w[2]) # EEMS (cusp), EEMS (roem)
 )
 
 
 p <- pPcaAll + pAdmix + free(pAmovaRaw, side = "l") + free(pAmovaNorm, side = "r") +
-    pPcaDrum + pEemsMigDrum + pEemsMigCusp + pEemsMigRoem +
     pIbdAll +
+    pPcaDrum + pEemsMigDrum + pEemsMigCusp + pEemsMigRoem +
     plot_layout(design = layout)
 
 ggsave(p, file = "figure2.pdf", width = 14, height = 14, device = cairo_pdf, family = "Arial")

@@ -141,6 +141,23 @@ LoadTexasBorder <- function() {
     texas_coords
 }
 
+LoadEdwardsPlateau <- function(shape_path = "reg6_eco_l3/reg6_eco_l3.shp") {
+    require(sf)
+
+    tmp <- st_read(shape_path)
+
+    # Get Edwards Plateau data, transform to lat/long
+    edplat <- st_transform(tmp[tmp$US_L3NAME == "Edwards Plateau", ], 4326)
+    edplat <- as.data.table(st_coordinates(edplat))
+
+    setnames(edplat, c("X", "Y"), c("LONG", "LAT"))
+    for (cn in str_c("L", 1:2)) {
+        edplat[, eval(cn) := as.factor(get(cn))]
+    }
+
+    edplat
+}
+
 ### BED manipulation
 CountUniqueBases <- function(chrom, start_base, end_base, conda_env = "popgen") {
     require(data.table)
