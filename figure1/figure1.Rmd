@@ -1205,7 +1205,14 @@ p <- ggbarplot(plt_d,
     xlab("Genomic feature") +
     ylab("SVs per feature megabase")
 print(p)
-# ggsave(p, file = "tmp.pdf", width = 3, height = 4)
+ggsave(
+    p,
+    file = "Supplement.SV_occupancy.pdf",
+    width = 4,
+    height = 3,
+    device = cairo_pdf,
+    family = "Arial"
+)
 ```
 
 ## Pi values in different partitions of the genome_plots
@@ -1265,6 +1272,14 @@ p <- ggplot(plt_d, aes(x = FEATURE, y = PI_med)) +
     theme(legend.position = "none")
 
 print(p)
+ggsave(
+    p,
+    file = "Supplement.Pi.pdf",
+    width = 4.5,
+    height = 3,
+    device = cairo_pdf,
+    family = "Arial"
+)
 print(plt_d)
 ```
 
@@ -1303,7 +1318,7 @@ p <- wrap_elements(full = ~ CircosPlot(outer_only = FALSE)) +
     free(p_f, side = "r") +
     plot_layout(design = areas)
 
-ggsave(p, file = "figure1.pdf", 
+ggsave(p, file = "figure1.pdf",
        device = cairo_pdf,
        family = "Arial",
        width = max(areas$r) / 2,
