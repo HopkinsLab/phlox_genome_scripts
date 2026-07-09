@@ -214,6 +214,7 @@ plt_d <- admix_info[["cv"]]
 p <- ggplot(plt_d, aes(x = K, y = CV_error)) +
     geom_point(color = "dodgerblue") + geom_line(color = "dodgerblue")
 print(p)
+plist[["admix_cv"]] <- p
 ```
 
 Actual admixture plot
@@ -223,7 +224,7 @@ k <- admix_info[["plot_k"]]
 plt_d <- admix_info[[k]]
 
 # Identify admixed samples
-tmp <- dcast(admix_info[["3"]][, .(IID, pop_infer, value)], IID ~ pop_infer)
+tmp <- dcast(plt_d[, .(IID, pop_infer, value)], IID ~ pop_infer)
 anc_co <- 0.9
 admix_samps <- tmp[((p1 > anc_co) + (p2 > anc_co) + (p3 > anc_co)) != 1, IID]
 admix_annot <- plt_d[IID %in% admix_samps, .(X = as.integer(IID), Y = cumsum(rev(value))[which.min(abs(cumsum(rev(value)) - 0.5))]), by = IID]
@@ -286,6 +287,64 @@ for (i in seq_along(x_midpts)) {
 plist[["admix"]] <- p
 print(p)
 ```
+
+Supplementary admixture plots
+
+```{r plotSuppAdmix, fig.width = 8, fig.height = 12}
+k_values <- as.character(setdiff(2:8, admix_info$plot_k))
+supp_plist <- list()
+
+for (k in k_values) {
+    plt_d <- admix_info[[k]]
+
+    x_annot <- which(!duplicated(admix_info[["ord"]]$species))[-1] - 0.5
+    x_midpts <- (c(1, x_annot + 0.5) + c(x_annot + 0.5, length(levels(plt_d$IID)))) / 2
+
+    admix_pal <- get_palette("d3", k = as.integer(k))
+    names(admix_pal) <- str_c("p", 1:as.integer(k))
+
+    p <- ggplot(plt_d, aes(x = IID, y = value, fill = pop_infer)) +
+        geom_bar(stat = "identity", width = 1) +
+        geom_hline(yintercept = 0, color = "black") +
+        scale_fill_manual(values = admix_pal) +
+        ylab("Proportion inferred ancestry") +
+        ggtitle(str_interp("k = ${k}")) +
+        theme(
+            axis.line.x = element_blank(),
+            axis.title.x = element_blank(),
+            axis.text.x = element_blank(),
+            axis.ticks.x = element_blank(),
+            axis.title.y = element_text(size = 9),
+            legend.title = element_text(size = 9),
+            legend.position = "right"
+        )
+    for (x in x_annot) {
+        p <- p + annotate("path", x = rep(x, 2), y = c(0, 0.05), color = "black")
+    }
+
+    for (i in seq_along(x_midpts)) {
+        x <- x_midpts[i]
+        sp <- admix_info[["ord"]][, levels(species)][i]
+        p <- p + annotate("text", x = x, y = 0.05, label = ConvertSpeciesNames(sp), hjust = "center", color = "black", fontface = "italic", size = 3)
+    }
+
+    supp_plist[[k]] <- p + theme(legend.position = "none")
+}
+
+p <- supp_plist[["2"]] /
+    supp_plist[["4"]] /
+    supp_plist[["5"]] /
+    supp_plist[["6"]] /
+    supp_plist[["7"]] /
+    supp_plist[["8"]]
+
+
+ggsave(p, file = "Supplement.Admix.pdf",
+       width = 8, height = 12,
+       device = cairo_pdf, family = "Arial")
+print(p)
+```
+
 
 # EEMS
 
