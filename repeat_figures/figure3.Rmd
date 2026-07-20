@@ -17,7 +17,7 @@ Load packages
 ```{r loadPkg, message=FALSE}
 source("../utils/genome_plots.R")
 
-req_pkgs <- c("data.table", "stringr", "ggpubr", "patchwork", "ggpattern")
+req_pkgs <- c("data.table", "stringr", "ggpubr", "patchwork", "ggpattern", "scales")
 LoadPackages(req_pkgs)
 
 SetBaseTheme(base_family = "Arial", fontpath = "~/.local/share/fonts")
@@ -222,11 +222,6 @@ gt_dat <- gt_dat[!rm_i, ]
 
 ### Pick a window to plot
 ```{r pickExampleWindow}
-# Annotate SV type
-for (x in c("INS", "DEL", "DUP", "INV")) {
-    gt_dat[str_detect(ID, x), SVTYPE := x]
-}
-
 # List of samples by species
 samp_list <- list()
 for (sp in SpeciesNames()) {
@@ -462,5 +457,107 @@ ggsave(p, file = "figure3.part2.pdf",
        family = "Arial",
        width = 10,
        height = 10)
+print(p)
+```
+
+## Supplementary plot of SV length
+
+Summary of SV lengths
+
+```{r reportSVLengths}
+sv_gts <- fread("tables/phlox_variation_summary.FINAL.gt.tsv.gz", header = TRUE, na.strings = c(".", "", "NA"))
+
+# By species
+out_str <- c("Number of SVs obs per sp\n",
+             "------------------------\n")
+n_svs <- c()
+for (sp in SpeciesNames("ont")) {
+    m <- rep(FALSE, nrow(sv_gts))
+    cur_samps <- names(sv_gts)[str_starts(names(sv_gts), sp)]
+    for (samp in cur_samps) {
+        tmp <- sv_gts[, !is.na(get(samp)) & get(samp) != "0/0"]
+        m <- m | tmp
+        n_svs[samp] <- sum(tmp)
+    }
+    g_sp <- ConvertSpeciesNames(sp, "ont", "g_species")
+    out_str <- c(out_str, str_interp("${g_sp}: ${sum(m)}\n"))
+}
+
+# By type
+out_str <- c(out_str, "\n")
+out_str <- c(out_str, "SVs by type\n", "------------------------\n")
+cur_tab <- table(sv_gts$SVTYPE)
+for (svtype in names(cur_tab)) {
+    out_str <- c(out_str, str_interp("${svtype}: ${cur_tab[svtype]}\n"))
+}
+out_str <- c(out_str, str_interp("total: ${nrow(sv_gts)}\n"))
+
+# Average across individuals
+out_str <- c(out_str, "\n")
+out_str <- c(out_str, "Number of SVs across inds\n", "------------------------\n")
+out_str <- c(out_str, str_interp("Mean: $[0.1f]{mean(n_svs)}\n"))
+out_str <- c(out_str, str_interp("Median: ${median(n_svs)}\n"))
+out_str <- c(out_str, str_interp("Range: [$[0.0f]{min(n_svs)}, $[0.0f]{max(n_svs)}]\n"))
+out_str <- c(out_str, str_interp("IQR: [$[0.0f]{quantile(n_svs, 0.25)}, $[0.0f]{quantile(n_svs, 0.75)}]\n"))
+
+# Size distribution
+out_str <- c(out_str, "\n")
+out_str <- c(out_str, "Size distribution\n", "------------------------\n")
+svtype_list <- as.list(unique(sv_gts$SVTYPE))
+names(svtype_list) <- unname(svtype_list)
+svtype_list <- c(svtype_list, 
+                 list("INS/DEL" = c("INS", "DEL"), "DUP/INV" = c("DUP", "INV")))
+
+for (svtype in names(svtype_list)) {
+    out_str <- c(out_str, str_interp("${svtype} \n"))
+    cur_lens <- sv_gts[SVTYPE %in% svtype_list[[svtype]], abs(SVLEN)]
+    out_str <- c(out_str, str_interp("    Mean: $[0.1f]{mean(cur_lens)}\n"))
+    out_str <- c(out_str, str_interp("    Median: ${median(cur_lens)}\n"))
+    out_str <- c(out_str, str_interp("    Range: [$[0.0f]{min(cur_lens)}, $[0.0f]{max(cur_lens)}]\n"))
+    out_str <- c(out_str, str_interp("    IQR: [$[0.0f]{quantile(cur_lens, 0.25)}, $[0.0f]{quantile(cur_lens, 0.75)}]\n"))
+}
+
+cat(out_str)
+```
+
+Plot length distributions
+```{r plotSVlengths, fig.width = 6, fig.height = 6}
+remap_svtypes <- c(
+    "INS" = "Insertion",
+    "DEL" = "Deletion",
+    "INV" = "Inversion",
+    "DUP" = "Duplication"
+)
+
+plt_d <- sv_gts[, .(`SV type` = factor(remap_svtypes[SVTYPE], levels = unname(remap_svtypes)),
+                    `SV length` = abs(SVLEN))]
+
+p <- ggviolin(plt_d, x = "SV type", y = "SV length", fill = "SV type") +
+    stat_summary(
+        fun.data = function(y) {
+            data.frame(
+                y    = median(y),
+                ymin = quantile(y, 0.25),
+                ymax = quantile(y, 0.75)
+            )
+        },
+        geom  = "crossbar",
+        width = 0.2,
+        color = "black"
+    ) +
+    scale_y_log10(
+        breaks = 10^(2:5),
+        minor_breaks = outer(1:9, 10^(2:5), `*`),
+        labels = function(x) math_format(10^.x)(log10(x))
+    ) +
+    annotation_logticks(sides = "l") +
+    theme(axis.title.x = element_blank())
+p <- set_palette(p, "d3")
+
+ggsave(p, file = "Supplement.SV_lengths.pdf",
+       device = cairo_pdf,
+       family = "Arial",
+       width = 6,
+       height = 6)
 print(p)
 ```
