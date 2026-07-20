@@ -212,9 +212,15 @@ CV error for different k values
 ```{r plotAdmixError, fig.width = 4, fig.height = 3}
 plt_d <- admix_info[["cv"]]
 p <- ggplot(plt_d, aes(x = K, y = CV_error)) +
-    geom_point(color = "dodgerblue") + geom_line(color = "dodgerblue")
+    geom_point(color = "dodgerblue") + geom_line(color = "dodgerblue") +
+    ylab("Cross-validation error")
+
 print(p)
 plist[["admix_cv"]] <- p
+
+ggsave(p, file = "Supplement.CV_Error.pdf",
+       width = 5, height = 4,
+       device = cairo_pdf, family = "Arial")
 ```
 
 Actual admixture plot
