@@ -11,3 +11,6 @@ roemPres	cuspPres	bquote(N[fam] * "[" * SV[italic(roem)] * "]")	bquote(N[fam] * 
 drumUniq	drumPres	bquote(N[fam] * "[" * SV[list(italic(drum),unique)] * "]")	bquote(N[fam] * "[" * SV[italic(drum)] * "]")
 cuspUniq	cuspPres	bquote(N[fam] * "[" * SV[list(italic(cusp),unique)] * "]")	bquote(N[fam] * "[" * SV[italic(cusp)] * "]")
 roemUniq	roemPres	bquote(N[fam] * "[" * SV[list(italic(roem),unique)] * "]")	bquote(N[fam] * "[" * SV[italic(roem)] * "]")
+roem_drum_cusp  	drumUniq	bquote(N[fam] * "[" * SV[italic(roem),italic(drum),italic(cusp)] * "]")	bquote(N[fam] * "[" * SV[list(italic(drum),unique)] * "]")
+roem_drum_cusp  	cuspUniq	bquote(N[fam] * "[" * SV[italic(roem),italic(drum),italic(cusp)] * "]")	bquote(N[fam] * "[" * SV[list(italic(cusp),unique)] * "]")
+roem_drum_cusp  	roemUniq	bquote(N[fam] * "[" * SV[italic(roem),italic(drum),italic(cusp)] * "]")	bquote(N[fam] * "[" * SV[list(italic(roem),unique)] * "]")

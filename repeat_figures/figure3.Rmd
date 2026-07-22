@@ -109,6 +109,15 @@ for (nm in comp_tab[["NAME"]]) {
 }
 ```
 
+### Report specific values
+```{r reportModelVals}
+for (nm in c("drumUniq::roem_drum_cusp", "roemUniq::roem_drum_cusp", "cuspUniq::roem_drum_cusp")) {
+    pval <- mlist[[nm]][["pval"]]
+    rsq <- mlist[[nm]][["rsq"]]
+    cat(str_interp("${nm}\np = ${pval}, rsq = $[0.3f]{rsq}\n"))
+}
+```
+
 ### Plotting
 
 Plot TE-SV counts and GLM results for each comparison.
