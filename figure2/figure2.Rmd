@@ -473,6 +473,18 @@ for (sp in SpeciesNames("short")) {
         save(p, file = rdat_fn)
     }
 
+    if (sp == "drum"){
+        tmp <- as.data.table(p$mrates01$data)
+        ed_plat_pops <- rbind(c(-98.54003, 30.29176), c(-98.841583, 30.272333), c(-98.110483, 30.5497))
+        logm_vals <- c()
+        for (i in seq_len(nrow(ed_plat_pops))) {
+            xcoord <- targvals[i, 1]
+            ycoord <- targvals[i, 2]
+            logm_vals <- c(logm_vals, tmp[abs(ycoord - y) < 0.002][which.min(abs(xcoord - x)), z])
+        }
+        cat("Southeastern Edwards Plateau population log(m):\n")
+        print(logm_vals)
+    }
 
     for (nm in names(p)) {
         if (str_detect(nm, "rates")) {
