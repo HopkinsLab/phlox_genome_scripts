@@ -475,6 +475,79 @@ CircosPlot()
 dev.off()
 ```
 
+### Supplementary figure of pi and fst centered on chr2:709000000 chr7:53000000 
+```{r piFstZoomSupplement}
+zoom_window <- data.table(CHROM = c("chr2", "chr7"), WINDOW_END = c(709000000, 290000000))
+zoom_width <- 80e6 # How wide of a window to show in bp
+linesize <- 1.5
+
+supp_p <- list()
+for (rn in seq_len(nrow(zoom_window))) {
+    supp_p[[rn]] <- list()
+    chrom <- zoom_window[rn, CHROM]
+    wend <- zoom_window[rn, WINDOW_END]
+    zoom_lwr <- wend - zoom_width / 2 - 5e6
+    zoom_upr <- zoom_width / 2 + wend
+    zoom_dat <- pixy_info$data$pi[pop == "drum"][CHROM == chrom][window_pos_1 >= zoom_lwr][window_pos_2 <= zoom_upr][,
+        .(VALUE = mean(avg_pi)), by = COORD
+    ]
+    supp_p[[rn]][["drum"]] <- ggplot(zoom_dat, aes(x = COORD, y = VALUE)) +
+        geom_line(color = Load4SpPal()["drum"], size = linesize) +
+        ylab("Nucleotide Diversity,\nP. drummondii") +
+        scale_y_continuous(breaks = seq(0.01, 0.04, length.out = 4), limits = c(0, 0.05)) +
+        ggtitle(str_interp("${chrom}:$[d]{zoom_lwr}-$[d]{zoom_upr}")) +
+        theme(
+            panel.grid.major.y = element_line(color = "gray70", linetype = "dashed"),
+            axis.text.x = element_blank(),
+            axis.title.x = element_blank(),
+            axis.ticks.x = element_blank()
+        )
+
+    zoom_dat <- pixy_info$data$fst[pop1 == "drum" & pop2 == "roem"][CHROM == chrom][window_pos_1 >= zoom_lwr][window_pos_2 <= zoom_upr][,
+        .(VALUE = mean(avg_wc_fst)), by = COORD
+    ]
+    supp_p[[rn]][["roem"]] <- ggplot(zoom_dat, aes(x = COORD, y = VALUE)) +
+        geom_line(color = Load4SpPal()["roem"], size = linesize) +
+        ylab("Fst, P. drummondii\nvs. P. roemeriana") +
+        scale_y_continuous(breaks = seq(0.04, 0.16, length.out = 4), limits = c(0, 0.18)) +
+        theme(
+            panel.grid.major.y = element_line(color = "gray70", linetype = "dashed"),
+            axis.text.x = element_blank(),
+            axis.title.x = element_blank(),
+            axis.ticks.x = element_blank()
+        )
+
+    zoom_dat <- pixy_info$data$fst[pop1 == "cusp" & pop2 == "drum"][CHROM == chrom][window_pos_1 >= zoom_lwr][window_pos_2 <= zoom_upr][,
+        .(VALUE = mean(avg_wc_fst)), by = COORD
+    ]
+    supp_p[[rn]][["cusp"]] <- ggplot(zoom_dat, aes(x = COORD, y = VALUE)) +
+        geom_line(color = Load4SpPal()["cusp"], size = linesize) +
+        xlab("Position (Mb)") +
+        ylab("Fst, P. drummondii\nvs. P. cuspidata") +
+        scale_y_continuous(breaks = seq(0.05, 0.20, length.out = 4), limits = c(0, 0.21)) +
+        theme(
+            panel.grid.major.y = element_line(color = "gray70", linetype = "dashed"),
+        )
+    if (rn == 2) {
+        for (nm in names(supp_p[[rn]])){
+            supp_p[[rn]][[nm]] <- supp_p[[rn]][[nm]] +
+                theme(axis.title.y = element_blank())
+        }
+    }
+}
+
+p <- (supp_p[[1]]$drum | supp_p[[2]]$drum) /
+    (supp_p[[1]]$roem | supp_p[[2]]$roem) /
+    (supp_p[[1]]$cusp | supp_p[[2]]$cusp)
+print(p)
+ggsave(p, file = "Supplement.pi_fst_zoom.pdf",
+       device = cairo_pdf,
+       family = "Arial",
+       width = 10,
+       height = 6)
+p <- plist[["supp_zoom"]]
+```
+
 # Tree and multiple alignment figures
 
 ## Plotting parameters
