@@ -163,58 +163,6 @@ rule make_gap_bed:
         cp {input} {output}
         """
 
-# # CpG annotations
-# rule make_cpg_bed:
-#     input:
-#         "results/ref/" + config["ref"]["name"] + ".fasta"
-#     output:
-#         "results/annotations/cpg_island.bed"
-#     resources:
-#         mem_mb = 8000,
-#         runtime = 120,
-#         tmpdir = "/scratch",
-#         partition = "serial_requeue" 
-#     conda:
-#         "../envs/bedtools.yml"
-#     shell:
-#         """
-#         workflow/scripts/cpg_island.sh {input} | \
-#             bedtools sort -i /dev/stdin -g {input}.fai  > {output}
-#         """
-
-# rule make_svs_bed:
-#     input:
-#         config["svs"]["path"]
-#     output:
-#         "results/annotations/SV_{sv_type}_AC{sv_ac}.bed"
-#     params:
-#         min_len = config["svs"]["minLen"],
-#         samples  = config["svs"]["samples"]
-#     conda:
-#         "../envs/bedtools.yml"
-#     resources:
-#         mem_mb = 4000,
-#         runtime = 120,
-#         tmpdir = "/scratch",
-#         partition = "serial_requeue" 
-#     shell:
-#         """
-#         samp_str=""
-#         for s in {params.samples}; do
-#             samp_str="$samp_str$s,"
-#         done
-#         samp_str=${{samp_str%,}}
-
-#         bcftools view -s $samp_str {input} | \
-#             bcftools +fill-tags -- -t AN,AC | \
-#             bcftools query -i 'AC > 0' \
-#                 -f '%CHROM\t%POS\t%SVLEN\t%SVTYPE\t%AC\n' | \
-#             awk -v OFS="\t" -v MINLEN={params.min_len} -v SVTYPE={wildcards.sv_type} -v SVAC={wildcards.sv_ac} \
-#                 '$4 == SVTYPE && $5 == SVAC {{if((($3 >= 0) && ($3 > MINLEN)) || (($3 < 0) && (-$3 > MINLEN))){{print $1,$2-1,$2}}}}' \
-#             > {output}
-#         """
-
-
 rule make_svs_bed:
     input:
         config["svs"]["path"]
@@ -289,35 +237,6 @@ rule sv_overlap:
             bedtools intersect -a $tmpbed -b - -u > {output}
         """
 
-
-# rule get_transloc:
-#     input:
-#         config["svs"]["path"]
-#     output:
-#         "results/annotations/translocations.tsv"
-#     params:
-#         samples = config["svs"]["samples"]
-#     conda:
-#         "../envs/bedtools.yml"
-#     resources:
-#         mem_mb = 4000,
-#         runtime = 120,
-#         tmpdir = "/scratch",
-#         partition = "serial_requeue" 
-#     shell:
-#         """
-#         samp_str=""
-#         for s in {params.samples}; do
-#             samp_str="$samp_str$s,"
-#         done
-#         samp_str=${{samp_str%,}}
-
-#         bcftools view -s $samp_str {input} | \
-#             bcftools +fill-tags -- -t AN,AC | \
-#             bcftools query -i 'AC > 0 && (ALT == "<INV>" || ALT == "<DUP>" || ALT == "<BND>")' \
-#                 -f '%CHROM\t%POS\t%SVTYPE\t%SVLEN\t%CHR2\t%END\n' \
-#             > {output}
-#         """
 
 # coverage and counts across windows
 rule windowed_coverage:
