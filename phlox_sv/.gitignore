@@ -1,0 +1,12 @@
+.snakemake/
+results/
+workflow/logs/
+workflow/*svim*
+*.vcf
+*.txt
+*.out
+*err*
+*out*
+*.vcf.gz
+*.slurm
+PLINK/

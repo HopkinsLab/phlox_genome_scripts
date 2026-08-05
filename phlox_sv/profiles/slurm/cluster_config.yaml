@@ -1,0 +1,78 @@
+__default__:
+    partition: "shared"
+    time: 720
+    nodes: 1
+    output: "workflow/logs/slurm-%j.out"
+    error: "workflow/logs/slurm-%j.err"
+
+snifflesCall:
+    partition: "intermediate,holy-cow" 
+    output: "workflow/logs/sniffcall-%j.out"
+    error: "workflow/logs/sniffcall-%j.err"
+    job-name: "sniffcall"
+
+cutesvCall:
+    partition: "intermediate,holy-cow" 
+    output: "workflow/logs/cutecall-%j.out"
+    error: "workflow/logs/cutecall-%j.err"
+    job-name: "cutecall"
+
+svimCall:
+    partition: "intermediate,holy-cow" 
+    output: "workflow/logs/svimcall-%j.out"
+    error: "workflow/logs/svimcall-%j.err"
+    job-name: "svimcall"
+
+survMergeCallers:
+    partition: "intermediate,holy-cow" 
+    output: "workflow/logs/merge-%j.out"
+    error: "workflow/logs/merge-%j.err"
+    job-name: "merge"
+
+vcfFilter:
+    partition: "shared" 
+    output: "workflow/logs/filter-%j.out"
+    error: "workflow/logs/filter-%j.err"
+    job-name: "filter"
+
+fixHeader:
+    partition: "shared" 
+    output: "workflow/logs/fix-%j.out"
+    error: "workflow/logs/fix-%j.err"
+    job-name: "fixhead"
+
+jasMergeSamples:
+    partition: "intermediate" 
+    output: "workflow/logs/jasmerge-%j.out"
+    error: "workflow/logs/jasmerge-%j.err"
+    job-name: "jasmerge"
+
+survMergeSamples:
+    partition: "holy-cow" 
+    output: "workflow/logs/survmerge-%j.out"
+    error: "workflow/logs/survmerge-%j.err"
+    job-name: "survmerge"
+
+forceCall:
+    partition: "holy-cow" 
+    output: "workflow/logs/forcecall-%j.out"
+    error: "workflow/logs/forcecall-%j.err"
+    job-name: "forcecall"
+
+jasForceCall:
+    partition: "intermediate" 
+    output: "workflow/logs/jasforcecall-%j.out"
+    error: "workflow/logs/jasforcecall-%j.err"
+    job-name: "jasforcecall"
+
+fixFinalHeader:
+    partition: "shared" 
+    output: "workflow/logs/fix-%j.out"
+    error: "workflow/logs/fix-%j.err"
+    job-name: "fix"
+
+finalSurvMerge:
+    partition: "holy-cow" 
+    output: "workflow/logs/finalsurvmerge-%j.out"
+    error: "workflow/logs/finalsurvmerge-%j.err"
+    job-name: "merge"
