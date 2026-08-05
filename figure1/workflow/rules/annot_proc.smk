@@ -146,6 +146,60 @@ rule merge_repeats:
             bedtools merge -i - > {output}
         """
 
+# Identify repeat families and extract them separately
+rule sum_repeat_annot_family_overlap:
+    input: 
+        rpt_bed = "results/annotations/repeats.families.bed",
+        merged_bed = "results/annotations/repeats.families.merged.bed",
+        annot_bed = "results/annotations/{annot_type}.bed"
+    output: "results/annotations/{annot_type}.rptfams_overlap.nbases.csv"
+    resources:
+        mem_mb = 8000,
+        runtime = 240,
+        tmpdir = "/scratch",
+        partition = "shared"
+    conda:
+        "../envs/bedtools.yml"
+    shell:
+        """
+        tmpfn=$(mktemp)
+        cut -f 12 {input.rpt_bed} | sort | uniq > $tmpfn
+        n=$(wc -l $tmpfn | cut -f 1 -d ' ')
+
+        feat_bed=$(mktemp --suffix='.bed')
+        sort -k1,1 -k2,2n {input.annot_bed} | \
+            bedtools merge -i - > $feat_bed
+
+        feature_bp=$(awk '{{sum += $3 - $2}} END {{print sum}}' $feat_bed)
+        rpt_bp=$(awk '{{sum += $3 - $2}} END {{print sum}}' {input.merged_bed})
+
+        echo 'FEATURE,REPEAT_FAM,OVERLAP_BP,FEATURE_BP,REPEAT_BP' > {output}
+        bedtools intersect -a $feat_bed -b {input.merged_bed} | \
+                awk -v OFS=',' -v repeat_bp=$rpt_bp -v repeat_fam='All' -v feature={wildcards.annot_type} -v feature_bp=$feature_bp \
+                    '{{overlap_bp += $3 - $2}} END {{print feature,repeat_fam,overlap_bp,feature_bp,repeat_bp}}' >> {output}
+
+        tmpbed=$(mktemp --suffix='.bed')
+        for i in $(seq $n); do
+            fam=$(sed -n ${{i}}p $tmpfn)
+            awk -v FS='\t' -v OFS='\t' -v fam=$fam '$12 == fam' {input.rpt_bed} | \
+                sort -k1,1 -k2,2n | \
+                bedtools merge -i - > $tmpbed
+
+            rpt_bp=$(awk '{{sum += $3 - $2}} END {{print sum}}' $tmpbed)
+
+            bedtools intersect -a $feat_bed -b $tmpbed | \
+                awk -v OFS=',' -v repeat_bp=$rpt_bp -v repeat_fam=$fam -v feature={wildcards.annot_type} -v feature_bp=$feature_bp \
+                    '{{overlap_bp += $3 - $2}} END {{print feature,repeat_fam,overlap_bp,feature_bp,repeat_bp}}' >> {output}
+        done
+        """
+
+def get_repeat_families(wildcards):
+    checkpoint_output = checkpoints.extract_repeat_families.get().output[0]
+    with open(checkpoint_output, "r", encoding="utf-8") as f:
+        fams = f.read().splitlines()
+    return expand("results/annotations/rpt_fams/repeats.families.{fams}.bed", fams=fams)
+
+
 
 # Create bed file of gap locations
 rule make_gap_bed:

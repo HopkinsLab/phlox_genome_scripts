@@ -25,6 +25,8 @@ rule all:
                annot_type=["genes", "introns", "exons"]),
         expand("results/annotations/{annot_type}.uniq_bp.txt",
                annot_type=["genes", "introns", "exons"]),
+        expand("results/annotations/{annot_type}.rptfams_overlap.nbases.csv",
+               annot_type=["genes", "introns", "exons"]),
 
 include: "workflow/rules/annot_proc.smk"
 
