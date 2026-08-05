@@ -173,7 +173,7 @@ rule sum_repeat_annot_family_overlap:
         feature_bp=$(awk '{{sum += $3 - $2}} END {{print sum}}' $feat_bed)
         rpt_bp=$(awk '{{sum += $3 - $2}} END {{print sum}}' {input.merged_bed})
 
-        echo 'FEATURE,REPEAT_FAM,OVERLAP_BP,FEATURE_BP,REPEAT_BP' > {output}
+        echo 'FEATURE,REPEAT_FAM,OVERLAP_BP,FEATURE_BP_GAPPED,REPEAT_BP' > {output}
         bedtools intersect -a $feat_bed -b {input.merged_bed} | \
                 awk -v OFS=',' -v repeat_bp=$rpt_bp -v repeat_fam='All' -v feature={wildcards.annot_type} -v feature_bp=$feature_bp \
                     '{{overlap_bp += $3 - $2}} END {{print feature,repeat_fam,overlap_bp,feature_bp,repeat_bp}}' >> {output}
